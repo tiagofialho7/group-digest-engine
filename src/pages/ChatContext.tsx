@@ -206,9 +206,9 @@ const lovableModels = [
 ];
 
 const anthropicModels = [
-  { value: "anthropic/claude-sonnet-4-5-20250929", label: "Claude Sonnet 4.5" },
-  { value: "anthropic/claude-sonnet-4-20250514", label: "Claude Sonnet 4" },
   { value: "anthropic/claude-haiku-4-5-20251001", label: "Claude Haiku 4.5" },
+  { value: "anthropic/claude-sonnet-4-20250514", label: "Claude Sonnet 4" },
+  { value: "anthropic/claude-sonnet-4-5-20250929", label: "Claude Sonnet 4.5" },
 ];
 
 function buildMultimodalContent(text: string, imageUrls: string[]): string | Array<{ type: string; text?: string; image_url?: { url: string } }> {
