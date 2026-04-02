@@ -479,6 +479,10 @@ export default function ChatContext() {
         .eq("provider", "anthropic")
         .maybeSingle();
       setHasAnthropicKey(!!data);
+      // Default to Haiku when Anthropic key is available and no model was previously selected
+      if (data && !localStorage.getItem("chat-selected-model")) {
+        setSelectedModel(anthropicModels[0].value);
+      }
     };
     check();
   }, [org]);
