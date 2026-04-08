@@ -371,6 +371,83 @@ export default function SettingsPage() {
               </>
             )}
           </section>
+
+          {/* Cron Job Config */}
+          <section className="rounded-lg border border-border bg-card p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Clock className="h-4 w-4 text-primary" />
+              <h3 className="text-sm font-semibold text-foreground">Configuração do Cron Job</h3>
+            </div>
+            <p className="text-[10px] text-muted-foreground mb-4">
+              Configure um serviço externo como <a href="https://cron-job.org" target="_blank" rel="noopener noreferrer" className="text-primary underline">cron-job.org</a> para chamar o agente automaticamente.
+            </p>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1 block">URL (POST)</label>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 bg-muted border border-border rounded-lg px-3 py-2 text-xs text-foreground break-all select-all">
+                    {`https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/prospection-agent-scheduler`}
+                  </code>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 w-8 p-0 shrink-0"
+                    onClick={() => {
+                      navigator.clipboard.writeText(`https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/prospection-agent-scheduler`);
+                      toast.success("URL copiada!");
+                    }}
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1 block">Headers</label>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 bg-muted border border-border rounded-lg px-3 py-2 text-xs text-foreground break-all select-all">
+                    {`Authorization: Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`}
+                  </code>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 w-8 p-0 shrink-0"
+                    onClick={() => {
+                      navigator.clipboard.writeText(`Authorization: Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`);
+                      toast.success("Header copiado!");
+                    }}
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1 block">Content-Type</label>
+                <code className="block bg-muted border border-border rounded-lg px-3 py-2 text-xs text-foreground">
+                  application/json
+                </code>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1 block">Body</label>
+                <code className="block bg-muted border border-border rounded-lg px-3 py-2 text-xs text-foreground">
+                  {`{ "manual": false }`}
+                </code>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1 block">Frequência sugerida</label>
+                <code className="block bg-muted border border-border rounded-lg px-3 py-2 text-xs text-foreground">
+                  */5 * * * * — a cada 5 minutos
+                </code>
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  O scheduler verifica internamente se é horário de execução. Fora dos horários configurados acima, ele retorna sem fazer nada.
+                </p>
+              </div>
+            </div>
+          </section>
         </TabsContent>
 
         {/* Agent Instructions Tab */}
