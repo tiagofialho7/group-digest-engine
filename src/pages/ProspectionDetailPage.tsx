@@ -278,6 +278,11 @@ export default function ProspectionDetailPage() {
             <div className="flex items-center justify-center py-6">
               <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
             </div>
+          ) : messageError ? (
+            <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-center">
+              <p className="text-xs text-destructive">{messageError}</p>
+              <p className="text-[10px] text-muted-foreground mt-1">Verifique a Evolution API nas Configurações</p>
+            </div>
           ) : whatsappMessages.length === 0 ? (
             <p className="text-xs text-muted-foreground py-4 text-center">
               Nenhuma mensagem encontrada.
