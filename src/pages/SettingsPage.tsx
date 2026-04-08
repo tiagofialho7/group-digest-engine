@@ -95,15 +95,20 @@ export default function SettingsPage() {
   const [savingSchedule, setSavingSchedule] = useState(false);
   const [savingInstructions, setSavingInstructions] = useState(false);
   const [loadingConfig, setLoadingConfig] = useState(true);
+  const [lastExecution, setLastExecution] = useState<any>(null);
+  const [runningAgent, setRunningAgent] = useState(false);
 
   useEffect(() => {
     if (!org) return;
 
     const fetchConfig = async () => {
-      const { data } = await supabase.from("agent_schedule_config").select("*").eq("org_id", org.id).maybeSingle();
+      const [schedRes, execRes] = await Promise.all([
+        supabase.from("agent_schedule_config").select("*").eq("org_id", org.id).maybeSingle(),
+        supabase.from("agent_execution_logs").select("*").eq("org_id", org.id).order("executed_at", { ascending: false }).limit(1).maybeSingle(),
+      ]);
 
-      if (data) {
-        const d = data as any;
+      if (schedRes.data) {
+        const d = schedRes.data as any;
         setSchedule({
           id: d.id,
           is_active: d.is_active,
@@ -115,6 +120,8 @@ export default function SettingsPage() {
           agent_instructions: d.agent_instructions || DEFAULT_INSTRUCTIONS,
         });
       }
+
+      if (execRes.data) setLastExecution(execRes.data);
 
       setLoadingConfig(false);
     };
