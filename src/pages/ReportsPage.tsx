@@ -81,13 +81,13 @@ export default function ReportsPage() {
     new Date(g.last_activity_at) < staleThreshold
   );
 
-  // Stage counts
+  // Stage counts — include ALL groups (active + inactive) for full funnel view
   const stageCounts = useMemo(() => {
     return PROSPECTION_STAGES.map(s => ({
       stage: s.shortLabel,
       key: s.key,
       color: s.color,
-      count: filteredGroups.filter(g => g.current_stage === s.key && g.is_active).length,
+      count: filteredGroups.filter(g => g.current_stage === s.key).length,
     }));
   }, [filteredGroups]);
 
