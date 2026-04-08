@@ -9,6 +9,7 @@ import { useOrganization } from "@/hooks/useOrganization";
 import AppLayout from "@/components/AppLayout";
 import ProspectionDashboard from "@/pages/ProspectionDashboard";
 import ReportsPage from "@/pages/ReportsPage";
+import ProspectionDetailPage from "@/pages/ProspectionDetailPage";
 import SettingsPage from "@/pages/SettingsPage";
 import AuthPage from "@/pages/AuthPage";
 import ForgotPassword from "@/pages/ForgotPassword";
@@ -83,6 +84,7 @@ const App = () => (
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/onboarding" element={<OnboardingRoute><OnboardingPage /></OnboardingRoute>} />
               <Route path="/" element={<ProtectedRoute><ProspectionDashboard /></ProtectedRoute>} />
+              <Route path="/prospection/:id" element={<ProtectedRoute><ProspectionDetailPage /></ProtectedRoute>} />
               <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
               <Route path="/reports" element={<ProtectedRoute><ReportsPage /></ProtectedRoute>} />
               <Route path="/team" element={<ProtectedRoute><TeamPage /></ProtectedRoute>} />
