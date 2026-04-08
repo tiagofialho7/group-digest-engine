@@ -6,6 +6,14 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+interface AttemptResult {
+  method: string;
+  url: string;
+  status: number | null;
+  error: string | null;
+  success: boolean;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -15,13 +23,11 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: corsHeaders });
     }
 
-    // Use service role for DB access (vault secrets, etc.)
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Verify user token
     const token = authHeader.replace("Bearer ", "");
     const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(token);
     if (userError || !userData?.user) {
@@ -35,7 +41,6 @@ serve(async (req) => {
       });
     }
 
-    // Verify user is org member
     const { data: membership } = await supabaseAdmin
       .from("org_members")
       .select("id")
@@ -50,7 +55,6 @@ serve(async (req) => {
       });
     }
 
-    // Fetch Evolution API credentials
     const { data: evoConfig } = await supabaseAdmin
       .from("evolution_api_configs")
       .select("api_url, api_key")
@@ -63,7 +67,6 @@ serve(async (req) => {
       });
     }
 
-    // Get real API key from vault if stored there
     let apiKey = evoConfig.api_key;
     if (apiKey === "***vault***") {
       const { data: vaultKey } = await supabaseAdmin.rpc("get_vault_secret", {
@@ -72,7 +75,6 @@ serve(async (req) => {
       if (vaultKey) apiKey = vaultKey;
     }
 
-    // Fetch instance phone number to identify agent messages
     const { data: instanceData } = await supabaseAdmin
       .from("whatsapp_instances")
       .select("phone_number")
@@ -81,35 +83,100 @@ serve(async (req) => {
       .single();
 
     const agentPhone = instanceData?.phone_number || null;
+    const attempts: AttemptResult[] = [];
+    let messages: any[] = [];
+    let successMethod: string | null = null;
 
-    // Fetch messages from Evolution API
-    console.log(`Fetching messages for group ${groupId} via instance ${instanceName}`);
-    const response = await fetch(
-      `${evoConfig.api_url}/chat/findMessages/${instanceName}`,
-      {
+    // Attempt 1: POST /chat/findMessages/{instanceName}
+    const url1 = `${evoConfig.api_url}/chat/findMessages/${instanceName}`;
+    try {
+      console.log(`Attempt 1: POST ${url1}`);
+      const res1 = await fetch(url1, {
         method: "POST",
-        headers: {
-          apikey: apiKey,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          where: { key: { remoteJid: groupId } },
-          limit: 50,
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error("Evolution API error:", response.status, errText);
-      return new Response(JSON.stringify({ error: `Evolution API error (${response.status}): ${errText}` }), {
-        status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { apikey: apiKey, "Content-Type": "application/json" },
+        body: JSON.stringify({ where: { key: { remoteJid: groupId } }, limit: 50 }),
       });
+      const body1 = await res1.text();
+      if (res1.ok) {
+        const parsed = JSON.parse(body1);
+        const arr = Array.isArray(parsed) ? parsed : (parsed?.messages || []);
+        if (arr.length > 0) {
+          messages = arr;
+          successMethod = "POST /chat/findMessages";
+          attempts.push({ method: "POST /chat/findMessages", url: url1, status: res1.status, error: null, success: true });
+        } else {
+          attempts.push({ method: "POST /chat/findMessages", url: url1, status: res1.status, error: `OK but empty (${body1.substring(0, 200)})`, success: false });
+        }
+      } else {
+        attempts.push({ method: "POST /chat/findMessages", url: url1, status: res1.status, error: body1.substring(0, 300), success: false });
+      }
+    } catch (e) {
+      attempts.push({ method: "POST /chat/findMessages", url: url1, status: null, error: String(e), success: false });
     }
 
-    const messages = await response.json();
+    // Attempt 2: GET /chat/fetchMessages/{instanceName}/{groupId}
+    if (!successMethod) {
+      const url2 = `${evoConfig.api_url}/chat/fetchMessages/${instanceName}/${groupId}?limit=50`;
+      try {
+        console.log(`Attempt 2: GET ${url2}`);
+        const res2 = await fetch(url2, {
+          method: "GET",
+          headers: { apikey: apiKey, "Content-Type": "application/json" },
+        });
+        const body2 = await res2.text();
+        if (res2.ok) {
+          const parsed = JSON.parse(body2);
+          const arr = Array.isArray(parsed) ? parsed : (parsed?.messages || []);
+          if (arr.length > 0) {
+            messages = arr;
+            successMethod = "GET /chat/fetchMessages";
+            attempts.push({ method: "GET /chat/fetchMessages", url: url2, status: res2.status, error: null, success: true });
+          } else {
+            attempts.push({ method: "GET /chat/fetchMessages", url: url2, status: res2.status, error: `OK but empty (${body2.substring(0, 200)})`, success: false });
+          }
+        } else {
+          attempts.push({ method: "GET /chat/fetchMessages", url: url2, status: res2.status, error: body2.substring(0, 300), success: false });
+        }
+      } catch (e) {
+        attempts.push({ method: "GET /chat/fetchMessages", url: url2, status: null, error: String(e), success: false });
+      }
+    }
 
-    return new Response(JSON.stringify({ messages: Array.isArray(messages) ? messages : [], agentPhone }), {
+    // Attempt 3: GET /message/findMessages/{instanceName}
+    if (!successMethod) {
+      const url3 = `${evoConfig.api_url}/message/findMessages/${instanceName}?remoteJid=${encodeURIComponent(groupId)}&limit=50`;
+      try {
+        console.log(`Attempt 3: GET ${url3}`);
+        const res3 = await fetch(url3, {
+          method: "GET",
+          headers: { apikey: apiKey, "Content-Type": "application/json" },
+        });
+        const body3 = await res3.text();
+        if (res3.ok) {
+          const parsed = JSON.parse(body3);
+          const arr = Array.isArray(parsed) ? parsed : (parsed?.messages || []);
+          messages = arr;
+          successMethod = "GET /message/findMessages";
+          attempts.push({ method: "GET /message/findMessages", url: url3, status: res3.status, error: null, success: true });
+        } else {
+          attempts.push({ method: "GET /message/findMessages", url: url3, status: res3.status, error: body3.substring(0, 300), success: false });
+        }
+      } catch (e) {
+        attempts.push({ method: "GET /message/findMessages", url: url3, status: null, error: String(e), success: false });
+      }
+    }
+
+    return new Response(JSON.stringify({
+      messages,
+      agentPhone,
+      debug: {
+        groupId,
+        instanceName,
+        apiUrl: evoConfig.api_url,
+        successMethod,
+        attempts,
+      },
+    }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
