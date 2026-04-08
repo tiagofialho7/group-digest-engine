@@ -61,6 +61,7 @@ export default function ProspectionDetailPage() {
   const [agentPhone, setAgentPhone] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
+  const [messageError, setMessageError] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
   const [changingStage, setChangingStage] = useState(false);
@@ -120,17 +121,23 @@ export default function ProspectionDetailPage() {
 
     const fetchWhatsAppMessages = async () => {
       setLoadingMessages(true);
+      setMessageError(null);
       try {
         const { data, error } = await supabase.functions.invoke("get-group-messages", {
           body: { groupId: group.whatsapp_group_id, instanceName, orgId: org.id },
         });
 
-        if (!error && data) {
-          setWhatsappMessages(Array.isArray(data.messages) ? data.messages.slice(0, 30) : []);
+        if (error) {
+          const errMsg = typeof error === "object" && error.message ? error.message : String(error);
+          setMessageError(`Erro ao buscar mensagens: ${errMsg}`);
+        } else if (data?.error) {
+          setMessageError(`Erro da API: ${data.error}`);
+        } else if (data) {
+          setWhatsappMessages(Array.isArray(data.messages) ? data.messages.slice(0, 50) : []);
           if (data.agentPhone) setAgentPhone(data.agentPhone);
         }
-      } catch {
-        // silently fail
+      } catch (err: any) {
+        setMessageError(`Erro inesperado: ${err?.message || "desconhecido"}`);
       } finally {
         setLoadingMessages(false);
       }
@@ -270,6 +277,11 @@ export default function ProspectionDetailPage() {
           {loadingMessages ? (
             <div className="flex items-center justify-center py-6">
               <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            </div>
+          ) : messageError ? (
+            <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-center">
+              <p className="text-xs text-destructive">{messageError}</p>
+              <p className="text-[10px] text-muted-foreground mt-1">Verifique a Evolution API nas Configurações</p>
             </div>
           ) : whatsappMessages.length === 0 ? (
             <p className="text-xs text-muted-foreground py-4 text-center">

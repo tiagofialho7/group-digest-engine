@@ -40,6 +40,15 @@ serve(async (req) => {
       });
     }
 
+    // Get real API key from vault if stored there
+    let apiKey = evoConfig.api_key;
+    if (apiKey === "***vault***") {
+      const { data: vaultKey } = await supabaseAdmin.rpc("get_vault_secret", {
+        p_name: `evo_api_key_${orgId}`,
+      });
+      if (vaultKey) apiKey = vaultKey;
+    }
+
     // 2. Get master instance
     const { data: instance } = await supabaseAdmin
       .from("whatsapp_instances")
@@ -87,17 +96,23 @@ serve(async (req) => {
 
     for (const group of groups) {
       try {
-        // 5. Fetch last 30 WhatsApp messages for this group
+        // Skip closed deals
+        if (group.current_stage === "deal_won" || group.current_stage === "deal_lost") {
+          console.log(`Group ${group.group_name}: skipped — deal finalized (${group.current_stage})`);
+          continue;
+        }
+
+        // 5. Fetch last 50 WhatsApp messages for this group
         let whatsappMessages: any[] = [];
         try {
           const msgRes = await fetch(
             `${evoConfig.api_url}/chat/findMessages/${instance.instance_name}`,
             {
               method: "POST",
-              headers: { apikey: evoConfig.api_key, "Content-Type": "application/json" },
+              headers: { apikey: apiKey, "Content-Type": "application/json" },
               body: JSON.stringify({
                 where: { key: { remoteJid: group.whatsapp_group_id } },
-                limit: 30,
+                limit: 50,
               }),
             }
           );
@@ -224,7 +239,7 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
             `${evoConfig.api_url}/message/sendText/${instance.instance_name}`,
             {
               method: "POST",
-              headers: { apikey: evoConfig.api_key, "Content-Type": "application/json" },
+              headers: { apikey: apiKey, "Content-Type": "application/json" },
               body: JSON.stringify({
                 number: group.whatsapp_group_id,
                 text: decision.message,

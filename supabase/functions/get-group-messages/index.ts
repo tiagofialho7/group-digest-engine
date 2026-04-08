@@ -15,15 +15,16 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: corsHeaders });
     }
 
-    const supabase = createClient(
+    // Use service role for DB access (vault secrets, etc.)
+    const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
+    // Verify user token
     const token = authHeader.replace("Bearer ", "");
-    const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
-    if (claimsError || !claimsData?.claims) {
+    const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(token);
+    if (userError || !userData?.user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: corsHeaders });
     }
 
@@ -34,8 +35,23 @@ serve(async (req) => {
       });
     }
 
+    // Verify user is org member
+    const { data: membership } = await supabaseAdmin
+      .from("org_members")
+      .select("id")
+      .eq("user_id", userData.user.id)
+      .eq("org_id", orgId)
+      .limit(1)
+      .maybeSingle();
+
+    if (!membership) {
+      return new Response(JSON.stringify({ error: "Not a member of this organization" }), {
+        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // Fetch Evolution API credentials
-    const { data: evoConfig } = await supabase
+    const { data: evoConfig } = await supabaseAdmin
       .from("evolution_api_configs")
       .select("api_url, api_key")
       .eq("org_id", orgId)
@@ -47,8 +63,17 @@ serve(async (req) => {
       });
     }
 
+    // Get real API key from vault if stored there
+    let apiKey = evoConfig.api_key;
+    if (apiKey === "***vault***") {
+      const { data: vaultKey } = await supabaseAdmin.rpc("get_vault_secret", {
+        p_name: `evo_api_key_${orgId}`,
+      });
+      if (vaultKey) apiKey = vaultKey;
+    }
+
     // Fetch instance phone number to identify agent messages
-    const { data: instanceData } = await supabase
+    const { data: instanceData } = await supabaseAdmin
       .from("whatsapp_instances")
       .select("phone_number")
       .eq("instance_name", instanceName)
@@ -58,17 +83,18 @@ serve(async (req) => {
     const agentPhone = instanceData?.phone_number || null;
 
     // Fetch messages from Evolution API
+    console.log(`Fetching messages for group ${groupId} via instance ${instanceName}`);
     const response = await fetch(
       `${evoConfig.api_url}/chat/findMessages/${instanceName}`,
       {
         method: "POST",
         headers: {
-          apikey: evoConfig.api_key,
+          apikey: apiKey,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
           where: { key: { remoteJid: groupId } },
-          limit: 30,
+          limit: 50,
         }),
       }
     );
@@ -76,7 +102,7 @@ serve(async (req) => {
     if (!response.ok) {
       const errText = await response.text();
       console.error("Evolution API error:", response.status, errText);
-      return new Response(JSON.stringify({ error: "Failed to fetch messages from WhatsApp" }), {
+      return new Response(JSON.stringify({ error: `Evolution API error (${response.status}): ${errText}` }), {
         status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

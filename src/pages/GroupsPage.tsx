@@ -287,12 +287,13 @@ export default function GroupsPage() {
               filteredMonitored.map(group => {
                 const stage = getStageInfo(group.current_stage);
                 const days = getDaysInStage(group.created_at);
+                const isClosed = group.current_stage === "deal_won" || group.current_stage === "deal_lost";
                 return (
-                  <Card key={group.id} className="border-border bg-card">
+                  <Card key={group.id} className={`border-border ${isClosed ? "bg-muted/30 opacity-60" : "bg-card"}`}>
                     <CardContent className="p-3">
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-foreground truncate">
+                          <p className={`text-sm font-medium truncate ${isClosed ? "text-muted-foreground" : "text-foreground"}`}>
                             {group.prospect_company || group.group_name}
                           </p>
                           {group.prospect_name && (
@@ -310,17 +311,20 @@ export default function GroupsPage() {
                             >
                               {stage.shortLabel}
                             </Badge>
-                            {group.priority === "high" && (
+                            {isClosed && (
+                              <span className="text-[10px] text-muted-foreground italic">Encerrado — sem monitoramento</span>
+                            )}
+                            {!isClosed && group.priority === "high" && (
                               <Badge variant="destructive" className="text-[10px] px-1.5 py-0">Urgente</Badge>
                             )}
-                            <span className="text-[10px] text-muted-foreground">{days}d na fase</span>
+                            {!isClosed && <span className="text-[10px] text-muted-foreground">{days}d na fase</span>}
                           </div>
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-7 w-7"
+                            className={`h-7 w-7 ${isClosed ? "text-muted-foreground" : ""}`}
                             onClick={() => navigate(`/prospection/${group.id}`)}
                             title="Ver detalhes"
                           >
