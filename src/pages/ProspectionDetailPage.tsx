@@ -273,15 +273,16 @@ export default function ProspectionDetailPage() {
             </div>
           ) : whatsappMessages.length === 0 ? (
             <p className="text-xs text-muted-foreground py-4 text-center">
-              {evolutionConfig ? "Nenhuma mensagem encontrada." : "Configure a Evolution API para ver as mensagens."}
+              Nenhuma mensagem encontrada.
             </p>
           ) : (
             <div className="space-y-1.5 max-h-[300px] overflow-y-auto">
               {whatsappMessages.map((msg, i) => {
                 const text = getMessageText(msg);
                 if (!text) return null;
+                const isAgentMsg = msg.key?.fromMe && agentPhone && msg.key?.participant?.includes(agentPhone);
                 return (
-                  <div key={msg.key?.id || i} className={`rounded-lg px-3 py-2 text-xs ${msg.key?.fromMe ? "bg-primary/10 ml-8" : "bg-muted/50 mr-8"}`}>
+                  <div key={msg.key?.id || i} className={`rounded-lg px-3 py-2 text-xs ${isAgentMsg ? "bg-primary/15 border border-primary/20 ml-8" : msg.key?.fromMe ? "bg-primary/10 ml-8" : "bg-muted/50 mr-8"}`}>
                     <div className="flex items-center justify-between mb-0.5">
                       <span className="font-medium text-foreground">{msg.pushName || (msg.key?.fromMe ? "Você" : "Participante")}</span>
                       {msg.messageTimestamp && (
