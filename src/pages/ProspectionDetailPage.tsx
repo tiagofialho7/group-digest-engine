@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/hooks/useOrganization";
 import { PROSPECTION_STAGES, getStageInfo } from "@/lib/prospection-stages";
-import { Loader2, ArrowLeft, ChevronDown, Clock, Bot, Save, CheckCircle, MessageCircle, Bug } from "lucide-react";
+import { Loader2, ArrowLeft, ChevronDown, Clock, Bot, Save, CheckCircle, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import {
@@ -62,7 +62,7 @@ export default function ProspectionDetailPage() {
   const [loading, setLoading] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [messageError, setMessageError] = useState<string | null>(null);
-  const [debugInfo, setDebugInfo] = useState<any>(null);
+  
   const [notes, setNotes] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
   const [changingStage, setChangingStage] = useState(false);
@@ -123,7 +123,6 @@ export default function ProspectionDetailPage() {
     const fetchWhatsAppMessages = async () => {
       setLoadingMessages(true);
       setMessageError(null);
-      setDebugInfo(null);
       try {
         const { data, error } = await supabase.functions.invoke("get-group-messages", {
           body: { groupId: group.whatsapp_group_id, instanceName, orgId: org.id },
@@ -132,18 +131,14 @@ export default function ProspectionDetailPage() {
         if (error) {
           const errMsg = typeof error === "object" && error.message ? error.message : String(error);
           setMessageError(`Erro ao buscar mensagens: ${errMsg}`);
-          setDebugInfo({ groupId: group.whatsapp_group_id, instanceName, error: errMsg });
         } else if (data?.error) {
           setMessageError(`Erro da API: ${data.error}`);
-          setDebugInfo({ groupId: group.whatsapp_group_id, instanceName, error: data.error, ...(data.debug || {}) });
         } else if (data) {
           setWhatsappMessages(Array.isArray(data.messages) ? data.messages.slice(0, 50) : []);
           if (data.agentPhone) setAgentPhone(data.agentPhone);
-          if (data.debug) setDebugInfo(data.debug);
         }
       } catch (err: any) {
         setMessageError(`Erro inesperado: ${err?.message || "desconhecido"}`);
-        setDebugInfo({ groupId: group.whatsapp_group_id, instanceName, error: err?.message });
       } finally {
         setLoadingMessages(false);
       }
@@ -317,34 +312,8 @@ export default function ProspectionDetailPage() {
           )}
         </div>
 
-        {/* Debug Card */}
-        {debugInfo && (
-          <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-4 md:col-span-2">
-            <h3 className="text-sm font-semibold text-yellow-400 mb-2 flex items-center gap-2">
-              <Bug className="h-3.5 w-3.5" />
-              Debug — Busca de Mensagens
-            </h3>
-            <div className="space-y-1.5 text-xs font-mono">
-              <p><span className="text-muted-foreground">groupId:</span> <span className="text-foreground">{debugInfo.groupId}</span></p>
-              <p><span className="text-muted-foreground">instanceName:</span> <span className="text-foreground">{debugInfo.instanceName}</span></p>
-              {debugInfo.apiUrl && (
-                <p><span className="text-muted-foreground">apiUrl:</span> <span className="text-foreground">{debugInfo.apiUrl}</span></p>
-              )}
-              <p><span className="text-muted-foreground">successMethod:</span> <span className={debugInfo.successMethod ? "text-green-400" : "text-destructive"}>{debugInfo.successMethod || "Nenhuma tentativa funcionou"}</span></p>
-              {debugInfo.attempts?.map((a: any, i: number) => (
-                <div key={i} className={`rounded p-2 mt-1 ${a.success ? "bg-green-500/10 border border-green-500/20" : "bg-destructive/5 border border-destructive/20"}`}>
-                  <p><span className="text-muted-foreground">Tentativa {i + 1}:</span> {a.method}</p>
-                  <p><span className="text-muted-foreground">Status:</span> {a.status ?? "N/A"}</p>
-                  {a.error && <p className="text-destructive break-all"><span className="text-muted-foreground">Erro:</span> {a.error}</p>}
-                  {a.success && <p className="text-green-400">✓ Sucesso</p>}
-                </div>
-              ))}
-              {debugInfo.error && !debugInfo.attempts && (
-                <p className="text-destructive break-all"><span className="text-muted-foreground">Erro:</span> {debugInfo.error}</p>
-              )}
-            </div>
-          </div>
-        )}
+
+
 
         {/* Timeline - Stage History */}
         <div className="rounded-lg border border-border bg-card p-4">
