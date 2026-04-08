@@ -201,9 +201,9 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
                     should_send: { type: "boolean", description: "Whether to send a message" },
                     message: { type: "string", description: "The message to send, or null if should_send is false" },
                     reasoning: { type: "string", description: "Brief reasoning for the decision" },
+                    suggested_stage: { type: "string", description: "If the conversation indicates the prospection moved to a new stage, provide the stage key: pre_qualification, contact_made, visit_done, project_elaborated, project_presented, deal_won, deal_lost. Otherwise omit." },
                   },
                   required: ["should_send", "reasoning"],
-                  additionalProperties: false,
                 },
               },
             }],
@@ -219,7 +219,7 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
         }
 
         const aiData = await aiRes.json();
-        let decision: { should_send: boolean; message?: string | null; reasoning: string };
+        let decision: { should_send: boolean; message?: string | null; reasoning: string; suggested_stage?: string | null };
 
         // Parse tool call response
         const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
@@ -237,7 +237,21 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
           }
         }
 
-        console.log(`Group ${group.group_name}: should_send=${decision.should_send}, reasoning=${decision.reasoning}`);
+        console.log(`Group ${group.group_name}: should_send=${decision.should_send}, reasoning=${decision.reasoning}, suggested_stage=${decision.suggested_stage || "none"}`);
+
+        // Handle automatic stage advancement
+        const validStages = ["pre_qualification", "contact_made", "visit_done", "project_elaborated", "project_presented", "deal_won", "deal_lost"];
+        if (decision.suggested_stage && validStages.includes(decision.suggested_stage) && decision.suggested_stage !== group.current_stage) {
+          console.log(`Group ${group.group_name}: advancing stage from ${group.current_stage} to ${decision.suggested_stage}`);
+          await supabaseAdmin.from("prospection_groups").update({ current_stage: decision.suggested_stage }).eq("id", group.id);
+          await supabaseAdmin.from("prospection_stage_history").insert({
+            prospection_group_id: group.id,
+            from_stage: group.current_stage,
+            to_stage: decision.suggested_stage,
+            changed_by: "agent",
+            reason: decision.reasoning,
+          });
+        }
 
         if (decision.should_send && decision.message) {
           // 9. Send message via Evolution API
