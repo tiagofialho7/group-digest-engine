@@ -239,7 +239,7 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
             `${evoConfig.api_url}/message/sendText/${instance.instance_name}`,
             {
               method: "POST",
-              headers: { apikey: evoConfig.api_key, "Content-Type": "application/json" },
+              headers: { apikey: apiKey, "Content-Type": "application/json" },
               body: JSON.stringify({
                 number: group.whatsapp_group_id,
                 text: decision.message,
