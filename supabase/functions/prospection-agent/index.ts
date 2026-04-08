@@ -112,7 +112,7 @@ serve(async (req) => {
               headers: { apikey: apiKey, "Content-Type": "application/json" },
               body: JSON.stringify({
                 where: { key: { remoteJid: group.whatsapp_group_id } },
-                limit: 30,
+                limit: 50,
               }),
             }
           );
