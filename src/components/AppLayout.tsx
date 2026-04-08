@@ -1,14 +1,13 @@
-import { ReactNode, useState, useEffect, useCallback } from "react";
+import { ReactNode, useState, useEffect, createContext, useContext } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Link, useLocation, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Settings, LogOut, Users, PanelLeftClose, PanelLeft, BookOpen, Menu, X, Sun, Moon, FileText } from "lucide-react";
+import { Link, useLocation } from "react-router-dom";
+import { LayoutDashboard, Settings, LogOut, Users, PanelLeftClose, PanelLeft, Menu, X, Sun, Moon, BarChart3, Target } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useAuth } from "@/hooks/useAuth";
 import { useOrganization } from "@/hooks/useOrganization";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import defaultLogo from "@/assets/logo.png";
 
 function profileInitials(profile: { full_name: string | null } | null | undefined, user: any) {
   if (profile?.full_name) return profile.full_name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
@@ -16,9 +15,8 @@ function profileInitials(profile: { full_name: string | null } | null | undefine
 }
 
 const navItems = [
-  { icon: LayoutDashboard, label: "Grupos", path: "/" },
-  { icon: FileText, label: "Resumos", path: "/summaries" },
-  { icon: BookOpen, label: "Knowledge", path: "/knowledge" },
+  { icon: LayoutDashboard, label: "Pipeline", path: "/" },
+  { icon: BarChart3, label: "Relatórios", path: "/reports" },
   { icon: Users, label: "Equipe", path: "/team" },
   { icon: Settings, label: "Configurações", path: "/settings" },
 ];
@@ -37,14 +35,16 @@ function SidebarContent({ collapsed, toggleCollapsed, org, user, signOut, locati
   const { theme, setTheme } = useTheme();
   return (
     <>
-      <div className={`flex items-center ${collapsed ? "justify-center px-2" : "gap-2 px-6"} h-14 shrink-0 border-b border-border`}>
-        <Avatar className="h-8 w-8 rounded-lg shrink-0">
-          <AvatarImage src={org?.logo_url || defaultLogo} alt={org?.name || "Logo"} className="object-cover" />
-          <AvatarFallback className="rounded-lg gradient-primary text-primary-foreground text-sm font-semibold">
-            {(org?.name || "G").charAt(0).toUpperCase()}
-          </AvatarFallback>
-        </Avatar>
-        {!collapsed && <span className="text-lg font-semibold text-foreground tracking-tight">{org?.name || "GroupLens"}</span>}
+      <div className={`flex items-center ${collapsed ? "justify-center px-2" : "gap-2.5 px-5"} h-14 shrink-0 border-b border-border`}>
+        <div className="w-8 h-8 rounded-lg gradient-primary flex items-center justify-center shrink-0">
+          <Target className="h-4 w-4 text-primary-foreground" />
+        </div>
+        {!collapsed && (
+          <div className="min-w-0">
+            <span className="text-sm font-bold text-foreground tracking-tight block truncate">PWR Gestão</span>
+            <span className="text-[10px] text-muted-foreground leading-none">Prospecção</span>
+          </div>
+        )}
       </div>
 
       <nav className="flex-1 px-2 py-4 space-y-1">
@@ -80,7 +80,6 @@ function SidebarContent({ collapsed, toggleCollapsed, org, user, signOut, locati
           <button
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
             className={`w-full flex items-center ${collapsed ? "justify-center" : ""} gap-2 px-3 py-2 rounded-lg text-xs text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors`}
-            title={theme === "dark" ? "Modo claro" : "Modo escuro"}
           >
             {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             {!collapsed && <span>{theme === "dark" ? "Claro" : "Escuro"}</span>}
@@ -88,7 +87,6 @@ function SidebarContent({ collapsed, toggleCollapsed, org, user, signOut, locati
           <button
             onClick={toggleCollapsed}
             className={`w-full flex items-center ${collapsed ? "justify-center" : ""} gap-2 px-3 py-2 rounded-lg text-xs text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors`}
-            title={collapsed ? "Expandir" : "Recolher"}
           >
             {collapsed ? <PanelLeft className="h-4 w-4" /> : <><PanelLeftClose className="h-4 w-4" /><span>Recolher</span></>}
           </button>
@@ -123,19 +121,11 @@ function SidebarContent({ collapsed, toggleCollapsed, org, user, signOut, locati
               <PopoverContent side="right" align="end" className="w-48 p-2">
                 <p className="text-sm font-medium text-foreground truncate px-2">{profile?.full_name || user?.email || "Usuário"}</p>
                 <p className="text-xs text-muted-foreground truncate px-2 mb-2">{user?.email}</p>
-                <Link
-                  to="/profile"
-                  onClick={onNavigate}
-                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-foreground hover:bg-accent transition-colors"
-                >
+                <Link to="/profile" onClick={onNavigate} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-foreground hover:bg-accent transition-colors">
                   Meu perfil
                 </Link>
-                <button
-                  onClick={() => { signOut(); onNavigate?.(); }}
-                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-destructive hover:bg-destructive/10 transition-colors"
-                >
-                  <LogOut className="h-3.5 w-3.5" />
-                  Sair
+                <button onClick={() => { signOut(); onNavigate?.(); }} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-destructive hover:bg-destructive/10 transition-colors">
+                  <LogOut className="h-3.5 w-3.5" />Sair
                 </button>
               </PopoverContent>
             </Popover>
@@ -164,9 +154,6 @@ function SidebarContent({ collapsed, toggleCollapsed, org, user, signOut, locati
   );
 }
 
-// Context to allow child pages to render the mobile menu button in their own header
-import { createContext, useContext } from "react";
-
 interface MobileMenuContextType {
   openMobileMenu: () => void;
 }
@@ -181,26 +168,17 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const location = useLocation();
   const { signOut, user } = useAuth();
   const { org } = useOrganization();
-  const [collapsed, setCollapsed] = useState(() => {
-    return localStorage.getItem("sidebar-collapsed") === "true";
-  });
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem("sidebar-collapsed") === "true");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profile, setProfile] = useState<{ full_name: string | null; avatar_url: string | null } | null>(null);
 
   useEffect(() => {
     if (!user) return;
-    supabase
-      .from("profiles")
-      .select("full_name, avatar_url")
-      .eq("user_id", user.id)
-      .single()
+    supabase.from("profiles").select("full_name, avatar_url").eq("user_id", user.id).single()
       .then(({ data }) => { if (data) setProfile(data); });
   }, [user]);
 
-  // Close mobile drawer on route change
-  useEffect(() => {
-    setMobileOpen(false);
-  }, [location.pathname]);
+  useEffect(() => { setMobileOpen(false); }, [location.pathname]);
 
   const toggleCollapsed = () => {
     setCollapsed(prev => {
@@ -210,77 +188,34 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     });
   };
 
-  // Pages that have their own header and will render the menu button themselves
-  const isChatPage = location.pathname.startsWith("/chat/");
-
   return (
     <MobileMenuContext.Provider value={{ openMobileMenu: () => setMobileOpen(true) }}>
       <TooltipProvider delayDuration={0}>
         <div className="flex h-screen overflow-hidden bg-background">
-          {/* Desktop sidebar */}
-          <aside className={`hidden md:flex flex-col border-r border-border bg-sidebar transition-all duration-300 ${collapsed ? "w-16" : "w-64"}`}>
-            <SidebarContent
-              collapsed={collapsed}
-              toggleCollapsed={toggleCollapsed}
-              org={org}
-              user={user}
-              signOut={signOut}
-              location={location}
-              profile={profile}
-            />
+          <aside className={`hidden md:flex flex-col border-r border-border bg-sidebar transition-all duration-300 ${collapsed ? "w-16" : "w-60"}`}>
+            <SidebarContent collapsed={collapsed} toggleCollapsed={toggleCollapsed} org={org} user={user} signOut={signOut} location={location} profile={profile} />
           </aside>
 
-          {/* Mobile overlay */}
-          {mobileOpen && (
-            <div
-              className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm md:hidden"
-              onClick={() => setMobileOpen(false)}
-            />
-          )}
+          {mobileOpen && <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm md:hidden" onClick={() => setMobileOpen(false)} />}
 
-          {/* Mobile drawer */}
-          <aside
-            className={`fixed inset-y-0 left-0 z-50 w-64 flex flex-col border-r border-border bg-sidebar transition-transform duration-300 ease-in-out md:hidden ${
-              mobileOpen ? "translate-x-0" : "-translate-x-full"
-            }`}
-            style={{ paddingTop: 'env(safe-area-inset-top)' }}
-          >
-            <div className="absolute right-3" style={{ top: 'calc(env(safe-area-inset-top) + 1rem)' }}>
-              <button
-                onClick={() => setMobileOpen(false)}
-                className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors"
-              >
+          <aside className={`fixed inset-y-0 left-0 z-50 w-60 flex flex-col border-r border-border bg-sidebar transition-transform duration-300 ease-in-out md:hidden ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}>
+            <div className="absolute right-3 top-4">
+              <button onClick={() => setMobileOpen(false)} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors">
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <SidebarContent
-              collapsed={false}
-              toggleCollapsed={toggleCollapsed}
-              org={org}
-              user={user}
-              signOut={signOut}
-              location={location}
-              onNavigate={() => setMobileOpen(false)}
-              isMobile
-              profile={profile}
-            />
+            <SidebarContent collapsed={false} toggleCollapsed={toggleCollapsed} org={org} user={user} signOut={signOut} location={location} onNavigate={() => setMobileOpen(false)} isMobile profile={profile} />
           </aside>
 
           <main className="flex-1 flex flex-col overflow-hidden relative">
-            <div className={`flex-1 overflow-y-auto`}>
-              {/* Sticky mobile menu header — hidden on pages with their own header */}
-              {!isChatPage && (
-                <div className="sticky top-0 z-30 md:hidden backdrop-blur-md bg-background/60" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
-                  <div className="h-12 relative">
-                    <button
-                      onClick={() => setMobileOpen(true)}
-                      className="absolute top-3 left-3 p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-                    >
-                      <Menu className="h-5 w-5" />
-                    </button>
-                  </div>
+            <div className="flex-1 overflow-y-auto">
+              <div className="sticky top-0 z-30 md:hidden backdrop-blur-md bg-background/60">
+                <div className="h-12 relative">
+                  <button onClick={() => setMobileOpen(true)} className="absolute top-3 left-3 p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors">
+                    <Menu className="h-5 w-5" />
+                  </button>
                 </div>
-              )}
+              </div>
               {children}
             </div>
           </main>
