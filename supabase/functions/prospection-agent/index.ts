@@ -40,6 +40,15 @@ serve(async (req) => {
       });
     }
 
+    // Get real API key from vault if stored there
+    let apiKey = evoConfig.api_key;
+    if (apiKey === "***vault***") {
+      const { data: vaultKey } = await supabaseAdmin.rpc("get_vault_secret", {
+        p_name: `evo_api_key_${orgId}`,
+      });
+      if (vaultKey) apiKey = vaultKey;
+    }
+
     // 2. Get master instance
     const { data: instance } = await supabaseAdmin
       .from("whatsapp_instances")
@@ -100,7 +109,7 @@ serve(async (req) => {
             `${evoConfig.api_url}/chat/findMessages/${instance.instance_name}`,
             {
               method: "POST",
-              headers: { apikey: evoConfig.api_key, "Content-Type": "application/json" },
+              headers: { apikey: apiKey, "Content-Type": "application/json" },
               body: JSON.stringify({
                 where: { key: { remoteJid: group.whatsapp_group_id } },
                 limit: 30,
