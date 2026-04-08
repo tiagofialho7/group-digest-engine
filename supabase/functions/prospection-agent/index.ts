@@ -74,7 +74,7 @@ serve(async (req) => {
 
     const agentInstructions = (schedConfig as any)?.agent_instructions || "Você é um analista comercial.";
 
-    // 4. Fetch prospection groups (single if groupId provided, else all active)
+    // 4. Fetch prospection groups
     let groupsQuery = supabaseAdmin
       .from("prospection_groups")
       .select("id, group_name, current_stage, prospect_name, prospect_company, whatsapp_group_id, priority")
@@ -88,7 +88,6 @@ serve(async (req) => {
     const { data: groups } = await groupsQuery;
 
     if (!groups || groups.length === 0) {
-      // Log execution
       await supabaseAdmin.from("agent_execution_logs").insert({
         org_id: orgId, groups_checked: 0, messages_sent: 0, status: "success",
       });
@@ -108,7 +107,18 @@ serve(async (req) => {
           continue;
         }
 
-        // 5. Fetch last 50 WhatsApp messages for this group
+        // 5. Fetch saved context for this group
+        const { data: savedContext } = await supabaseAdmin
+          .from("prospection_context")
+          .select("*")
+          .eq("prospection_group_id", group.id)
+          .single();
+
+        // Determine how many messages to fetch based on whether we have context
+        const hasContext = savedContext && savedContext.context_summary;
+        const messageLimit = hasContext ? 10 : 30;
+
+        // 6. Fetch WhatsApp messages (optimized: fewer if context exists)
         let whatsappMessages: any[] = [];
         try {
           const msgRes = await fetch(
@@ -118,19 +128,21 @@ serve(async (req) => {
               headers: { apikey: apiKey, "Content-Type": "application/json" },
               body: JSON.stringify({
                 where: { key: { remoteJid: group.whatsapp_group_id } },
-                limit: 50,
+                limit: messageLimit,
               }),
             }
           );
           if (msgRes.ok) {
             const data = await msgRes.json();
-            whatsappMessages = Array.isArray(data) ? data : [];
+            const arr = Array.isArray(data) ? data
+              : (data?.messages?.records || data?.records || data?.messages || []);
+            whatsappMessages = Array.isArray(arr) ? arr : [];
           }
         } catch (e) {
           console.error(`Failed to fetch messages for group ${group.id}:`, e);
         }
 
-        // 6. Fetch agent's previous messages for this group
+        // 7. Fetch agent's previous messages
         const { data: prevAgentMsgs } = await supabaseAdmin
           .from("agent_messages")
           .select("message_text, sent_at, message_type")
@@ -138,7 +150,7 @@ serve(async (req) => {
           .order("sent_at", { ascending: false })
           .limit(5);
 
-        // 7. Build context for AI
+        // 8. Build context for AI
         const messagesContext = whatsappMessages.map((m: any) => {
           const text = m.message?.conversation || m.message?.extendedTextMessage?.text || "";
           const sender = m.pushName || (m.key?.fromMe ? "Agente" : "Participante");
@@ -160,13 +172,26 @@ serve(async (req) => {
           deal_lost: "Negócio Perdido",
         };
 
+        // Build memory section
+        let memorySection = "";
+        if (hasContext) {
+          memorySection = `CONTEXTO SALVO DA ÚLTIMA ANÁLISE:
+Resumo: ${savedContext.context_summary || "(vazio)"}
+Pendências: ${savedContext.pending_actions || "(nenhuma)"}
+Datas importantes: ${savedContext.key_dates || "(nenhuma)"}
+
+MENSAGENS NOVAS DESDE A ÚLTIMA ANÁLISE:`;
+        } else {
+          memorySection = "ÚLTIMAS MENSAGENS DO GRUPO:";
+        }
+
         const userPrompt = `GRUPO: ${group.group_name}
 EMPRESA: ${group.prospect_company || "N/A"}
 PROSPECTO: ${group.prospect_name || "N/A"}
 FASE ATUAL: ${stageMap[group.current_stage] || group.current_stage}
 PRIORIDADE: ${group.priority === "high" ? "URGENTE" : "Normal"}
 
-ÚLTIMAS MENSAGENS DO GRUPO:
+${memorySection}
 ${messagesContext || "(sem mensagens recentes)"}
 
 HISTÓRICO DE COBRANÇAS DO AGENTE:
@@ -175,9 +200,9 @@ ${agentHistory || "(nenhuma cobrança anterior)"}
 DATA/HORA ATUAL: ${new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}
 
 Baseado no contexto acima, você deve enviar alguma mensagem agora? Se sim, qual?
-Responda APENAS em JSON válido: { "should_send": boolean, "message": string | null, "reasoning": string }`;
+Responda APENAS em JSON válido: { "should_send": boolean, "message": string | null, "reasoning": string, "context_summary": string, "pending_actions": string, "key_dates": string }`;
 
-        // 8. Call AI
+        // 9. Call AI
         const aiRes = await fetch(AI_GATEWAY, {
           method: "POST",
           headers: {
@@ -194,16 +219,19 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
               type: "function",
               function: {
                 name: "agent_decision",
-                description: "Decide whether to send a message to the prospection group",
+                description: "Decide whether to send a message to the prospection group and save context",
                 parameters: {
                   type: "object",
                   properties: {
                     should_send: { type: "boolean", description: "Whether to send a message" },
                     message: { type: "string", description: "The message to send, or null if should_send is false" },
                     reasoning: { type: "string", description: "Brief reasoning for the decision" },
-                    suggested_stage: { type: "string", description: "If the conversation indicates the prospection moved to a new stage, provide the stage key: pre_qualification, contact_made, visit_done, project_elaborated, project_presented, deal_won, deal_lost. Otherwise omit." },
+                    suggested_stage: { type: "string", description: "If the conversation indicates the prospection moved to a new stage, provide the stage key. Otherwise omit." },
+                    context_summary: { type: "string", description: "Resumo conciso do estado atual desta prospecção (2-3 frases)" },
+                    pending_actions: { type: "string", description: "Ações pendentes identificadas, separadas por ponto-e-vírgula" },
+                    key_dates: { type: "string", description: "Datas/horários importantes mencionados, separados por ponto-e-vírgula" },
                   },
-                  required: ["should_send", "reasoning"],
+                  required: ["should_send", "reasoning", "context_summary", "pending_actions", "key_dates"],
                 },
               },
             }],
@@ -219,14 +247,12 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
         }
 
         const aiData = await aiRes.json();
-        let decision: { should_send: boolean; message?: string | null; reasoning: string; suggested_stage?: string | null };
+        let decision: { should_send: boolean; message?: string | null; reasoning: string; suggested_stage?: string | null; context_summary?: string; pending_actions?: string; key_dates?: string };
 
-        // Parse tool call response
         const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
         if (toolCall?.function?.arguments) {
           decision = JSON.parse(toolCall.function.arguments);
         } else {
-          // Fallback: try parsing content
           const content = aiData.choices?.[0]?.message?.content || "";
           const jsonMatch = content.match(/\{[\s\S]*\}/);
           if (jsonMatch) {
@@ -238,6 +264,30 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
         }
 
         console.log(`Group ${group.group_name}: should_send=${decision.should_send}, reasoning=${decision.reasoning}, suggested_stage=${decision.suggested_stage || "none"}`);
+
+        // 10. Save/update context memory
+        if (decision.context_summary || decision.pending_actions || decision.key_dates) {
+          const contextData = {
+            org_id: orgId,
+            prospection_group_id: group.id,
+            context_summary: decision.context_summary || "",
+            pending_actions: decision.pending_actions || "",
+            key_dates: decision.key_dates || "",
+            last_stage_detected: group.current_stage,
+            last_analyzed_at: new Date().toISOString(),
+          };
+
+          if (savedContext) {
+            await supabaseAdmin
+              .from("prospection_context")
+              .update(contextData)
+              .eq("id", savedContext.id);
+          } else {
+            await supabaseAdmin
+              .from("prospection_context")
+              .insert(contextData);
+          }
+        }
 
         // Handle automatic stage advancement
         const validStages = ["pre_qualification", "contact_made", "visit_done", "project_elaborated", "project_presented", "deal_won", "deal_lost"];
@@ -254,7 +304,6 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
         }
 
         if (decision.should_send && decision.message) {
-          // 9. Send message via Evolution API
           const sendRes = await fetch(
             `${evoConfig.api_url}/message/sendText/${instance.instance_name}`,
             {
@@ -278,7 +327,6 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
             continue;
           }
 
-          // 10. Record in agent_messages
           await supabaseAdmin.from("agent_messages").insert({
             org_id: orgId,
             prospection_group_id: group.id,
@@ -288,14 +336,12 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
             whatsapp_message_id: whatsappMsgId,
           });
 
-          // 11. Resolve pending followups
           await supabaseAdmin
             .from("agent_pending_followups")
             .update({ status: "resolved", resolved_at: new Date().toISOString() })
             .eq("prospection_group_id", group.id)
             .eq("status", "pending");
 
-          // Update last_activity_at
           await supabaseAdmin
             .from("prospection_groups")
             .update({ last_agent_check_at: new Date().toISOString() })
@@ -303,12 +349,10 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
 
           totalMessagesSent++;
         } else {
-          // Check if we need a pending followup (last agent msg > 24h without response)
           const lastAgentMsg = prevAgentMsgs?.[0];
           if (lastAgentMsg) {
             const hoursSinceAgent = (Date.now() - new Date(lastAgentMsg.sent_at).getTime()) / (1000 * 60 * 60);
             if (hoursSinceAgent > 24) {
-              // Check if there's already a pending followup
               const { data: existing } = await supabaseAdmin
                 .from("agent_pending_followups")
                 .select("id")
@@ -328,7 +372,6 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
             }
           }
 
-          // Update last check
           await supabaseAdmin
             .from("prospection_groups")
             .update({ last_agent_check_at: new Date().toISOString() })
@@ -340,7 +383,6 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
       }
     }
 
-    // 12. Log execution
     await supabaseAdmin.from("agent_execution_logs").insert({
       org_id: orgId,
       groups_checked: groups.length,
