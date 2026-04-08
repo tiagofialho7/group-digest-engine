@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/hooks/useOrganization";
 import { PROSPECTION_STAGES, getStageInfo } from "@/lib/prospection-stages";
-import { Loader2, ArrowLeft, ChevronDown, Clock, Bot, Save, CheckCircle, MessageCircle, Play } from "lucide-react";
+import { Loader2, ArrowLeft, ChevronDown, Clock, Bot, Save, CheckCircle, MessageCircle, Play, Brain } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import {
@@ -43,6 +43,13 @@ interface AgentMessage {
   delivered: boolean;
 }
 
+interface AgentContext {
+  context_summary: string | null;
+  pending_actions: string | null;
+  key_dates: string | null;
+  last_analyzed_at: string | null;
+}
+
 interface WhatsAppMessage {
   key: { id: string; fromMe: boolean; participant?: string };
   message: { conversation?: string; extendedTextMessage?: { text?: string } };
@@ -68,6 +75,7 @@ export default function ProspectionDetailPage() {
   const [changingStage, setChangingStage] = useState(false);
   const [runningAgent, setRunningAgent] = useState(false);
   const [instanceName, setInstanceName] = useState<string | null>(null);
+  const [agentContext, setAgentContext] = useState<AgentContext | null>(null);
 
   // Fetch master instance
   useEffect(() => {
@@ -87,10 +95,11 @@ export default function ProspectionDetailPage() {
   const fetchData = useCallback(async () => {
     if (!id) return;
 
-    const [groupRes, historyRes, messagesRes] = await Promise.all([
+    const [groupRes, historyRes, messagesRes, contextRes] = await Promise.all([
       supabase.from("prospection_groups").select("*").eq("id", id).single(),
       supabase.from("prospection_stage_history").select("*").eq("prospection_group_id", id).order("created_at", { ascending: false }),
       supabase.from("agent_messages").select("*").eq("prospection_group_id", id).order("sent_at", { ascending: false }).limit(20),
+      supabase.from("prospection_context").select("context_summary, pending_actions, key_dates, last_analyzed_at").eq("prospection_group_id", id).single(),
     ]);
 
     if (groupRes.data) {
@@ -112,6 +121,7 @@ export default function ProspectionDetailPage() {
 
     if (historyRes.data) setHistory(historyRes.data as StageHistoryItem[]);
     if (messagesRes.data) setAgentMessages(messagesRes.data as AgentMessage[]);
+    if (contextRes.data) setAgentContext(contextRes.data as AgentContext);
     setLoading(false);
   }, [id]);
 
