@@ -156,6 +156,7 @@ export type Database = {
       }
       agent_schedule_config: {
         Row: {
+          agent_instructions: string | null
           check_time_1: string
           check_time_2: string
           check_time_3: string
@@ -173,6 +174,7 @@ export type Database = {
           wednesday: boolean
         }
         Insert: {
+          agent_instructions?: string | null
           check_time_1?: string
           check_time_2?: string
           check_time_3?: string
@@ -190,6 +192,7 @@ export type Database = {
           wednesday?: boolean
         }
         Update: {
+          agent_instructions?: string | null
           check_time_1?: string
           check_time_2?: string
           check_time_3?: string
