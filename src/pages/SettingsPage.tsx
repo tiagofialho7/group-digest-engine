@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Loader2, Save, Bot, Play, CheckCircle, AlertTriangle } from "lucide-react";
+import { Loader2, Save, Bot, Play, CheckCircle, AlertTriangle, Clock, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
