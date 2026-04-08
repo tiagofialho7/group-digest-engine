@@ -44,7 +44,7 @@ interface AgentMessage {
 }
 
 interface WhatsAppMessage {
-  key: { id: string; fromMe: boolean };
+  key: { id: string; fromMe: boolean; participant?: string };
   message: { conversation?: string; extendedTextMessage?: { text?: string } };
   pushName?: string;
   messageTimestamp?: number;
