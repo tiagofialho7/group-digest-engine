@@ -87,7 +87,13 @@ serve(async (req) => {
 
     for (const group of groups) {
       try {
-        // 5. Fetch last 30 WhatsApp messages for this group
+        // Skip closed deals
+        if (group.current_stage === "deal_won" || group.current_stage === "deal_lost") {
+          console.log(`Group ${group.group_name}: skipped — deal finalized (${group.current_stage})`);
+          continue;
+        }
+
+        // 5. Fetch last 50 WhatsApp messages for this group
         let whatsappMessages: any[] = [];
         try {
           const msgRes = await fetch(
