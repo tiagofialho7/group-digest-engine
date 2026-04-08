@@ -99,8 +99,8 @@ serve(async (req) => {
       const body1 = await res1.text();
       if (res1.ok) {
         const parsed = JSON.parse(body1);
-        const arr = Array.isArray(parsed) ? parsed : (parsed?.messages || []);
-        if (arr.length > 0) {
+        const arr = Array.isArray(parsed) ? parsed : (parsed?.messages?.records || parsed?.records || parsed?.messages || []);
+        if (Array.isArray(arr) && arr.length > 0) {
           messages = arr;
           successMethod = "POST /chat/findMessages";
           attempts.push({ method: "POST /chat/findMessages", url: url1, status: res1.status, error: null, success: true });
@@ -126,8 +126,8 @@ serve(async (req) => {
         const body2 = await res2.text();
         if (res2.ok) {
           const parsed = JSON.parse(body2);
-          const arr = Array.isArray(parsed) ? parsed : (parsed?.messages || []);
-          if (arr.length > 0) {
+          const arr = Array.isArray(parsed) ? parsed : (parsed?.messages?.records || parsed?.records || parsed?.messages || []);
+          if (Array.isArray(arr) && arr.length > 0) {
             messages = arr;
             successMethod = "GET /chat/fetchMessages";
             attempts.push({ method: "GET /chat/fetchMessages", url: url2, status: res2.status, error: null, success: true });
@@ -154,8 +154,8 @@ serve(async (req) => {
         const body3 = await res3.text();
         if (res3.ok) {
           const parsed = JSON.parse(body3);
-          const arr = Array.isArray(parsed) ? parsed : (parsed?.messages || []);
-          messages = arr;
+          const arr = Array.isArray(parsed) ? parsed : (parsed?.messages?.records || parsed?.records || parsed?.messages || []);
+          messages = Array.isArray(arr) ? arr : [];
           successMethod = "GET /message/findMessages";
           attempts.push({ method: "GET /message/findMessages", url: url3, status: res3.status, error: null, success: true });
         } else {
