@@ -219,6 +219,13 @@ export default function ProspectionDetailPage() {
         .order("sent_at", { ascending: false })
         .limit(20);
       if (msgs) setAgentMessages(msgs as AgentMessage[]);
+      // Refresh context
+      const { data: ctx } = await supabase
+        .from("prospection_context")
+        .select("context_summary, pending_actions, key_dates, last_analyzed_at")
+        .eq("prospection_group_id", group.id)
+        .single();
+      if (ctx) setAgentContext(ctx as AgentContext);
     } catch (e: any) {
       toast.error("Erro ao executar agente: " + (e.message || "Erro desconhecido"));
     } finally {
