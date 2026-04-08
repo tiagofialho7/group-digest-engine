@@ -2,7 +2,6 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/hooks/useOrganization";
-import { useEvolutionConfig } from "@/hooks/useEvolutionConfig";
 import { PROSPECTION_STAGES, getStageInfo } from "@/lib/prospection-stages";
 import { Loader2, ArrowLeft, ChevronDown, Clock, Bot, Save, CheckCircle, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -55,11 +54,11 @@ export default function ProspectionDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { org } = useOrganization();
-  const { config: evolutionConfig } = useEvolutionConfig(org?.id);
   const [group, setGroup] = useState<ProspectionDetail | null>(null);
   const [history, setHistory] = useState<StageHistoryItem[]>([]);
   const [agentMessages, setAgentMessages] = useState<AgentMessage[]>([]);
   const [whatsappMessages, setWhatsappMessages] = useState<WhatsAppMessage[]>([]);
+  const [agentPhone, setAgentPhone] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [notes, setNotes] = useState("");
@@ -115,43 +114,30 @@ export default function ProspectionDetailPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Fetch WhatsApp messages
+  // Fetch WhatsApp messages via edge function
   useEffect(() => {
-    if (!group || !evolutionConfig || !instanceName) return;
+    if (!group || !org || !instanceName) return;
 
     const fetchWhatsAppMessages = async () => {
       setLoadingMessages(true);
       try {
-        const response = await fetch(
-          `${evolutionConfig.api_url}/chat/findMessages/${instanceName}`,
-          {
-            method: "POST",
-            headers: {
-              apikey: evolutionConfig.api_key,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              where: {
-                key: { remoteJid: group.whatsapp_group_id },
-              },
-              limit: 30,
-            }),
-          }
-        );
+        const { data, error } = await supabase.functions.invoke("get-group-messages", {
+          body: { groupId: group.whatsapp_group_id, instanceName, orgId: org.id },
+        });
 
-        if (response.ok) {
-          const data = await response.json();
-          setWhatsappMessages(Array.isArray(data) ? data.slice(0, 30) : []);
+        if (!error && data) {
+          setWhatsappMessages(Array.isArray(data.messages) ? data.messages.slice(0, 30) : []);
+          if (data.agentPhone) setAgentPhone(data.agentPhone);
         }
       } catch {
-        // silently fail - messages are optional
+        // silently fail
       } finally {
         setLoadingMessages(false);
       }
     };
 
     fetchWhatsAppMessages();
-  }, [group?.whatsapp_group_id, evolutionConfig, instanceName]);
+  }, [group?.whatsapp_group_id, org?.id, instanceName]);
 
   const handleStageChange = async (newStage: string) => {
     if (!group || newStage === group.current_stage) return;
