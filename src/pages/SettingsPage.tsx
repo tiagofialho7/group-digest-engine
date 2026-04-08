@@ -178,6 +178,25 @@ export default function SettingsPage() {
     }
   };
 
+  const handleRunAgent = async () => {
+    if (!org) return;
+    setRunningAgent(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("prospection-agent-scheduler", {
+        body: { manual: true, orgId: org.id },
+      });
+      if (error) throw error;
+      toast.success(`Agente executado! ${data?.results?.[0]?.groups_checked || 0} grupos verificados, ${data?.results?.[0]?.messages_sent || 0} mensagens enviadas.`);
+      // Refresh last execution
+      const { data: execData } = await supabase.from("agent_execution_logs").select("*").eq("org_id", org.id).order("executed_at", { ascending: false }).limit(1).maybeSingle();
+      if (execData) setLastExecution(execData);
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao executar agente");
+    } finally {
+      setRunningAgent(false);
+    }
+  };
+
   if (!org || !user) return null;
 
   const hasEvolutionConfig = !!evolutionConfig;
