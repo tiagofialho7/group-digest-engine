@@ -358,7 +358,45 @@ export default function ProspectionDetailPage() {
             </div>
           )}
         </div>
-
+        {/* Agent Context Memory */}
+        {agentContext && agentContext.context_summary && (
+          <div className="rounded-lg border border-border bg-card p-4 md:col-span-2">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <Brain className="h-3.5 w-3.5 text-primary" />
+                Contexto do Agente
+              </h3>
+              {agentContext.last_analyzed_at && (
+                <span className="text-[10px] text-muted-foreground">
+                  Última análise: {(() => {
+                    const hours = Math.round((Date.now() - new Date(agentContext.last_analyzed_at).getTime()) / (1000 * 60 * 60));
+                    if (hours < 1) return "agora";
+                    if (hours < 24) return `${hours}h atrás`;
+                    return `${Math.round(hours / 24)}d atrás`;
+                  })()}
+                </span>
+              )}
+            </div>
+            <div className="space-y-2.5">
+              <div>
+                <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground mb-0.5">Resumo</p>
+                <p className="text-xs text-foreground">{agentContext.context_summary}</p>
+              </div>
+              {agentContext.pending_actions && (
+                <div>
+                  <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground mb-0.5">Pendências</p>
+                  <p className="text-xs text-foreground">{agentContext.pending_actions}</p>
+                </div>
+              )}
+              {agentContext.key_dates && (
+                <div>
+                  <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground mb-0.5">Datas Importantes</p>
+                  <p className="text-xs text-foreground">{agentContext.key_dates}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
 
 
