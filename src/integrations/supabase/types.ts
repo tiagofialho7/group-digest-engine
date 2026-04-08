@@ -14,6 +14,47 @@ export type Database = {
   }
   public: {
     Tables: {
+      agent_execution_logs: {
+        Row: {
+          created_at: string
+          error_log: string | null
+          executed_at: string
+          groups_checked: number
+          id: string
+          messages_sent: number
+          org_id: string
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          error_log?: string | null
+          executed_at?: string
+          groups_checked?: number
+          id?: string
+          messages_sent?: number
+          org_id: string
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          error_log?: string | null
+          executed_at?: string
+          groups_checked?: number
+          id?: string
+          messages_sent?: number
+          org_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_execution_logs_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       agent_message_templates: {
         Row: {
           created_at: string

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Loader2, Save, Bot } from "lucide-react";
+import { Loader2, Save, Bot, Play, CheckCircle, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -95,15 +95,20 @@ export default function SettingsPage() {
   const [savingSchedule, setSavingSchedule] = useState(false);
   const [savingInstructions, setSavingInstructions] = useState(false);
   const [loadingConfig, setLoadingConfig] = useState(true);
+  const [lastExecution, setLastExecution] = useState<any>(null);
+  const [runningAgent, setRunningAgent] = useState(false);
 
   useEffect(() => {
     if (!org) return;
 
     const fetchConfig = async () => {
-      const { data } = await supabase.from("agent_schedule_config").select("*").eq("org_id", org.id).maybeSingle();
+      const [schedRes, execRes] = await Promise.all([
+        supabase.from("agent_schedule_config").select("*").eq("org_id", org.id).maybeSingle(),
+        supabase.from("agent_execution_logs").select("*").eq("org_id", org.id).order("executed_at", { ascending: false }).limit(1).maybeSingle(),
+      ]);
 
-      if (data) {
-        const d = data as any;
+      if (schedRes.data) {
+        const d = schedRes.data as any;
         setSchedule({
           id: d.id,
           is_active: d.is_active,
@@ -115,6 +120,8 @@ export default function SettingsPage() {
           agent_instructions: d.agent_instructions || DEFAULT_INSTRUCTIONS,
         });
       }
+
+      if (execRes.data) setLastExecution(execRes.data);
 
       setLoadingConfig(false);
     };
@@ -171,6 +178,25 @@ export default function SettingsPage() {
     }
   };
 
+  const handleRunAgent = async () => {
+    if (!org) return;
+    setRunningAgent(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("prospection-agent-scheduler", {
+        body: { manual: true, orgId: org.id },
+      });
+      if (error) throw error;
+      toast.success(`Agente executado! ${data?.results?.[0]?.groups_checked || 0} grupos verificados, ${data?.results?.[0]?.messages_sent || 0} mensagens enviadas.`);
+      // Refresh last execution
+      const { data: execData } = await supabase.from("agent_execution_logs").select("*").eq("org_id", org.id).order("executed_at", { ascending: false }).limit(1).maybeSingle();
+      if (execData) setLastExecution(execData);
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao executar agente");
+    } finally {
+      setRunningAgent(false);
+    }
+  };
+
   if (!org || !user) return null;
 
   const hasEvolutionConfig = !!evolutionConfig;
@@ -219,6 +245,59 @@ export default function SettingsPage() {
 
         {/* Agent Schedule Tab */}
         <TabsContent value="agent" className="space-y-4">
+          {/* Agent Status Card */}
+          <section className="rounded-lg border border-border bg-card p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Bot className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold text-foreground">Status do Agente</h3>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5 text-xs h-7"
+                onClick={handleRunAgent}
+                disabled={runningAgent}
+              >
+                {runningAgent ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
+                Executar agora
+              </Button>
+            </div>
+            {lastExecution ? (
+              <div className="grid grid-cols-3 gap-3">
+                <div className="rounded-lg bg-muted/50 p-2.5">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Última execução</p>
+                  <p className="text-xs font-medium text-foreground">
+                    {new Date(lastExecution.executed_at).toLocaleDateString("pt-BR")} às {new Date(lastExecution.executed_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                  </p>
+                </div>
+                <div className="rounded-lg bg-muted/50 p-2.5">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Grupos verificados</p>
+                  <p className="text-xs font-medium text-foreground">{lastExecution.groups_checked}</p>
+                </div>
+                <div className="rounded-lg bg-muted/50 p-2.5">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Mensagens enviadas</p>
+                  <div className="flex items-center gap-1">
+                    <p className="text-xs font-medium text-foreground">{lastExecution.messages_sent}</p>
+                    {lastExecution.status === "success" ? (
+                      <CheckCircle className="h-3 w-3 text-success" />
+                    ) : (
+                      <AlertTriangle className="h-3 w-3 text-warning" />
+                    )}
+                  </div>
+                </div>
+                {lastExecution.error_log && (
+                  <div className="col-span-3 rounded-lg bg-destructive/5 border border-destructive/10 p-2">
+                    <p className="text-[10px] text-destructive">{lastExecution.error_log}</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">Nenhuma execução registrada ainda.</p>
+            )}
+          </section>
+
+          {/* Schedule config */}
           <section className="rounded-lg border border-border bg-card p-4">
             <div className="flex items-center justify-between mb-4">
               <div>
