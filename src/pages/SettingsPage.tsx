@@ -245,6 +245,59 @@ export default function SettingsPage() {
 
         {/* Agent Schedule Tab */}
         <TabsContent value="agent" className="space-y-4">
+          {/* Agent Status Card */}
+          <section className="rounded-lg border border-border bg-card p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Bot className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold text-foreground">Status do Agente</h3>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5 text-xs h-7"
+                onClick={handleRunAgent}
+                disabled={runningAgent}
+              >
+                {runningAgent ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
+                Executar agora
+              </Button>
+            </div>
+            {lastExecution ? (
+              <div className="grid grid-cols-3 gap-3">
+                <div className="rounded-lg bg-muted/50 p-2.5">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Última execução</p>
+                  <p className="text-xs font-medium text-foreground">
+                    {new Date(lastExecution.executed_at).toLocaleDateString("pt-BR")} às {new Date(lastExecution.executed_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                  </p>
+                </div>
+                <div className="rounded-lg bg-muted/50 p-2.5">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Grupos verificados</p>
+                  <p className="text-xs font-medium text-foreground">{lastExecution.groups_checked}</p>
+                </div>
+                <div className="rounded-lg bg-muted/50 p-2.5">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Mensagens enviadas</p>
+                  <div className="flex items-center gap-1">
+                    <p className="text-xs font-medium text-foreground">{lastExecution.messages_sent}</p>
+                    {lastExecution.status === "success" ? (
+                      <CheckCircle className="h-3 w-3 text-success" />
+                    ) : (
+                      <AlertTriangle className="h-3 w-3 text-warning" />
+                    )}
+                  </div>
+                </div>
+                {lastExecution.error_log && (
+                  <div className="col-span-3 rounded-lg bg-destructive/5 border border-destructive/10 p-2">
+                    <p className="text-[10px] text-destructive">{lastExecution.error_log}</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">Nenhuma execução registrada ainda.</p>
+            )}
+          </section>
+
+          {/* Schedule config */}
           <section className="rounded-lg border border-border bg-card p-4">
             <div className="flex items-center justify-between mb-4">
               <div>
