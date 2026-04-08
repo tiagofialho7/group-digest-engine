@@ -20,7 +20,7 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const { orgId } = await req.json();
+    const { orgId, groupId } = await req.json();
     if (!orgId) {
       return new Response(JSON.stringify({ error: "Missing orgId" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -74,12 +74,18 @@ serve(async (req) => {
 
     const agentInstructions = (schedConfig as any)?.agent_instructions || "Você é um analista comercial.";
 
-    // 4. Fetch all active prospection groups
-    const { data: groups } = await supabaseAdmin
+    // 4. Fetch prospection groups (single if groupId provided, else all active)
+    let groupsQuery = supabaseAdmin
       .from("prospection_groups")
       .select("id, group_name, current_stage, prospect_name, prospect_company, whatsapp_group_id, priority")
       .eq("org_id", orgId)
       .eq("is_active", true);
+
+    if (groupId) {
+      groupsQuery = groupsQuery.eq("id", groupId);
+    }
+
+    const { data: groups } = await groupsQuery;
 
     if (!groups || groups.length === 0) {
       // Log execution

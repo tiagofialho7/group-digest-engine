@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/hooks/useOrganization";
 import { PROSPECTION_STAGES, getStageInfo } from "@/lib/prospection-stages";
-import { Loader2, ArrowLeft, ChevronDown, Clock, Bot, Save, CheckCircle, MessageCircle } from "lucide-react";
+import { Loader2, ArrowLeft, ChevronDown, Clock, Bot, Save, CheckCircle, MessageCircle, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import {
@@ -66,6 +66,7 @@ export default function ProspectionDetailPage() {
   const [notes, setNotes] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
   const [changingStage, setChangingStage] = useState(false);
+  const [runningAgent, setRunningAgent] = useState(false);
   const [instanceName, setInstanceName] = useState<string | null>(null);
 
   // Fetch master instance
