@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/hooks/useOrganization";
 import { PROSPECTION_STAGES, getStageInfo } from "@/lib/prospection-stages";
-import { Loader2, ArrowLeft, ChevronDown, Clock, Bot, Save, CheckCircle, MessageCircle } from "lucide-react";
+import { Loader2, ArrowLeft, ChevronDown, Clock, Bot, Save, CheckCircle, MessageCircle, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import {
@@ -66,6 +66,7 @@ export default function ProspectionDetailPage() {
   const [notes, setNotes] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
   const [changingStage, setChangingStage] = useState(false);
+  const [runningAgent, setRunningAgent] = useState(false);
   const [instanceName, setInstanceName] = useState<string | null>(null);
 
   // Fetch master instance
@@ -190,6 +191,31 @@ export default function ProspectionDetailPage() {
     toast.success(newPriority === "high" ? "Marcado como urgente" : "Prioridade normalizada");
   };
 
+  const handleRunAgent = async () => {
+    if (!org || !group) return;
+    setRunningAgent(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("prospection-agent", {
+        body: { orgId: org.id, groupId: group.id },
+      });
+      if (error) throw error;
+      const sent = data?.messages_sent ?? 0;
+      toast.success(`Agente executado — ${sent} mensagem(ns) enviada(s)`);
+      // Reload agent messages
+      const { data: msgs } = await supabase
+        .from("agent_messages")
+        .select("*")
+        .eq("prospection_group_id", group.id)
+        .order("sent_at", { ascending: false })
+        .limit(20);
+      if (msgs) setAgentMessages(msgs as AgentMessage[]);
+    } catch (e: any) {
+      toast.error("Erro ao executar agente: " + (e.message || "Erro desconhecido"));
+    } finally {
+      setRunningAgent(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -263,6 +289,17 @@ export default function ProspectionDetailPage() {
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
+
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-xs h-8"
+              disabled={runningAgent}
+              onClick={handleRunAgent}
+            >
+              {runningAgent ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
+              Executar Agente
+            </Button>
           </div>
         </div>
       </div>
