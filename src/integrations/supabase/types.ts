@@ -1076,6 +1076,60 @@ export type Database = {
         }
         Relationships: []
       }
+      prospection_context: {
+        Row: {
+          context_summary: string | null
+          created_at: string
+          id: string
+          key_dates: string | null
+          last_analyzed_at: string | null
+          last_stage_detected: string | null
+          org_id: string
+          pending_actions: string | null
+          prospection_group_id: string
+          updated_at: string
+        }
+        Insert: {
+          context_summary?: string | null
+          created_at?: string
+          id?: string
+          key_dates?: string | null
+          last_analyzed_at?: string | null
+          last_stage_detected?: string | null
+          org_id: string
+          pending_actions?: string | null
+          prospection_group_id: string
+          updated_at?: string
+        }
+        Update: {
+          context_summary?: string | null
+          created_at?: string
+          id?: string
+          key_dates?: string | null
+          last_analyzed_at?: string | null
+          last_stage_detected?: string | null
+          org_id?: string
+          pending_actions?: string | null
+          prospection_group_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prospection_context_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prospection_context_prospection_group_id_fkey"
+            columns: ["prospection_group_id"]
+            isOneToOne: true
+            referencedRelation: "prospection_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       prospection_groups: {
         Row: {
           assigned_consultants: string[] | null
