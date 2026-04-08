@@ -173,22 +173,12 @@ export default function GroupAnalysis() {
     if (!groupId || !group || deleteConfirm !== group.name) return;
     setDeleting(true);
     try {
-      // Delete in order: context_blocks → analyses → messages → monitored_groups
-      const { data: analyses } = await supabase
-        .from("analyses")
-        .select("id")
-        .eq("group_id", groupId);
-
-      if (analyses?.length) {
-        const analysisIds = analyses.map(a => a.id);
-        await supabase.from("context_blocks").delete().in("analysis_id", analysisIds);
-        await supabase.from("analyses").delete().eq("group_id", groupId);
-      }
-
-      await supabase.from("messages").delete().eq("group_id", groupId);
-      await supabase.from("analysis_rules").delete().eq("group_id", groupId);
-      await supabase.from("group_knowledge_bases").delete().eq("group_id", groupId);
-      await supabase.from("monitored_groups").delete().eq("id", groupId);
+      // Soft-delete: set is_active = false instead of deleting
+      const { error } = await supabase
+        .from("monitored_groups")
+        .update({ is_active: false })
+        .eq("id", groupId);
+      if (error) throw error;
 
       toast.success("Grupo excluído com sucesso");
       navigate("/");

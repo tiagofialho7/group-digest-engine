@@ -79,7 +79,8 @@ serve(async (req) => {
       .from("prospection_groups")
       .select("id, group_name, current_stage, prospect_name, prospect_company, whatsapp_group_id, priority")
       .eq("org_id", orgId)
-      .eq("is_active", true);
+      .eq("is_active", true)
+      .not("current_stage", "in", "(deal_won,deal_lost)");
 
     if (groupId) {
       groupsQuery = groupsQuery.eq("id", groupId);
