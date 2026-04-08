@@ -2,8 +2,9 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/hooks/useOrganization";
+import { useEvolutionConfig } from "@/hooks/useEvolutionConfig";
 import { PROSPECTION_STAGES, getStageInfo } from "@/lib/prospection-stages";
-import { Loader2, ArrowLeft, ChevronDown, Clock, Bot, Save, AlertTriangle, CheckCircle } from "lucide-react";
+import { Loader2, ArrowLeft, ChevronDown, Clock, Bot, Save, CheckCircle, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import {
@@ -23,6 +24,7 @@ interface ProspectionDetail {
   notes: string | null;
   last_activity_at: string | null;
   assigned_consultants: string[];
+  whatsapp_group_id: string;
 }
 
 interface StageHistoryItem {
@@ -42,17 +44,43 @@ interface AgentMessage {
   delivered: boolean;
 }
 
+interface WhatsAppMessage {
+  key: { id: string; fromMe: boolean };
+  message: { conversation?: string; extendedTextMessage?: { text?: string } };
+  pushName?: string;
+  messageTimestamp?: number;
+}
+
 export default function ProspectionDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { org } = useOrganization();
+  const { config: evolutionConfig } = useEvolutionConfig(org?.id);
   const [group, setGroup] = useState<ProspectionDetail | null>(null);
   const [history, setHistory] = useState<StageHistoryItem[]>([]);
   const [agentMessages, setAgentMessages] = useState<AgentMessage[]>([]);
+  const [whatsappMessages, setWhatsappMessages] = useState<WhatsAppMessage[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMessages, setLoadingMessages] = useState(false);
   const [notes, setNotes] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
   const [changingStage, setChangingStage] = useState(false);
+  const [instanceName, setInstanceName] = useState<string | null>(null);
+
+  // Fetch master instance
+  useEffect(() => {
+    if (!org) return;
+    supabase.from("whatsapp_instances")
+      .select("instance_name")
+      .eq("org_id", org.id)
+      .eq("instance_type", "master")
+      .eq("status", "connected")
+      .limit(1)
+      .single()
+      .then(({ data }) => {
+        if (data) setInstanceName((data as any).instance_name);
+      });
+  }, [org]);
 
   const fetchData = useCallback(async () => {
     if (!id) return;
@@ -75,6 +103,7 @@ export default function ProspectionDetailPage() {
         notes: g.notes,
         last_activity_at: g.last_activity_at,
         assigned_consultants: g.assigned_consultants || [],
+        whatsapp_group_id: g.whatsapp_group_id,
       });
       setNotes(g.notes || "");
     }
@@ -85,6 +114,44 @@ export default function ProspectionDetailPage() {
   }, [id]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // Fetch WhatsApp messages
+  useEffect(() => {
+    if (!group || !evolutionConfig || !instanceName) return;
+
+    const fetchWhatsAppMessages = async () => {
+      setLoadingMessages(true);
+      try {
+        const response = await fetch(
+          `${evolutionConfig.api_url}/chat/findMessages/${instanceName}`,
+          {
+            method: "POST",
+            headers: {
+              apikey: evolutionConfig.api_key,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              where: {
+                key: { remoteJid: group.whatsapp_group_id },
+              },
+              limit: 30,
+            }),
+          }
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          setWhatsappMessages(Array.isArray(data) ? data.slice(0, 30) : []);
+        }
+      } catch {
+        // silently fail - messages are optional
+      } finally {
+        setLoadingMessages(false);
+      }
+    };
+
+    fetchWhatsAppMessages();
+  }, [group?.whatsapp_group_id, evolutionConfig, instanceName]);
 
   const handleStageChange = async (newStage: string) => {
     if (!group || newStage === group.current_stage) return;
@@ -150,8 +217,12 @@ export default function ProspectionDetailPage() {
 
   const currentStageInfo = getStageInfo(group.current_stage);
 
+  const getMessageText = (msg: WhatsAppMessage) => {
+    return msg.message?.conversation || msg.message?.extendedTextMessage?.text || "";
+  };
+
   return (
-    <div className="p-4 md:p-6 max-w-3xl mx-auto animate-fade-in">
+    <div className="p-4 md:p-6 max-w-4xl mx-auto animate-fade-in">
       {/* Header */}
       <div className="mb-6">
         <button onClick={() => navigate("/")} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors mb-3">
@@ -169,7 +240,6 @@ export default function ProspectionDetailPage() {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            {/* Priority badge */}
             <button
               onClick={handleTogglePriority}
               className={`text-[10px] font-medium px-2.5 py-1 rounded-full border transition-colors ${
@@ -181,15 +251,9 @@ export default function ProspectionDetailPage() {
               {group.priority === "high" ? "🔥 Urgente" : "Normal"}
             </button>
 
-            {/* Stage dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5 text-xs h-8"
-                  disabled={changingStage}
-                >
+                <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" disabled={changingStage}>
                   <div className="w-2 h-2 rounded-full" style={{ backgroundColor: `hsl(${currentStageInfo.color})` }} />
                   {currentStageInfo.label}
                   <ChevronDown className="h-3 w-3" />
@@ -197,11 +261,7 @@ export default function ProspectionDetailPage() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 {PROSPECTION_STAGES.map(stage => (
-                  <DropdownMenuItem
-                    key={stage.key}
-                    onClick={() => handleStageChange(stage.key)}
-                    className="text-xs gap-2"
-                  >
+                  <DropdownMenuItem key={stage.key} onClick={() => handleStageChange(stage.key)} className="text-xs gap-2">
                     <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: `hsl(${stage.color})` }} />
                     {stage.label}
                     {stage.key === group.current_stage && <CheckCircle className="h-3 w-3 ml-auto text-primary" />}
@@ -214,6 +274,44 @@ export default function ProspectionDetailPage() {
       </div>
 
       <div className="grid md:grid-cols-2 gap-4">
+        {/* WhatsApp Messages */}
+        <div className="rounded-lg border border-border bg-card p-4 md:col-span-2">
+          <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+            <MessageCircle className="h-3.5 w-3.5 text-primary" />
+            Últimas Mensagens do Grupo
+          </h3>
+
+          {loadingMessages ? (
+            <div className="flex items-center justify-center py-6">
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            </div>
+          ) : whatsappMessages.length === 0 ? (
+            <p className="text-xs text-muted-foreground py-4 text-center">
+              {evolutionConfig ? "Nenhuma mensagem encontrada." : "Configure a Evolution API para ver as mensagens."}
+            </p>
+          ) : (
+            <div className="space-y-1.5 max-h-[300px] overflow-y-auto">
+              {whatsappMessages.map((msg, i) => {
+                const text = getMessageText(msg);
+                if (!text) return null;
+                return (
+                  <div key={msg.key?.id || i} className={`rounded-lg px-3 py-2 text-xs ${msg.key?.fromMe ? "bg-primary/10 ml-8" : "bg-muted/50 mr-8"}`}>
+                    <div className="flex items-center justify-between mb-0.5">
+                      <span className="font-medium text-foreground">{msg.pushName || (msg.key?.fromMe ? "Você" : "Participante")}</span>
+                      {msg.messageTimestamp && (
+                        <span className="text-[10px] text-muted-foreground">
+                          {new Date(msg.messageTimestamp * 1000).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-foreground/90">{text}</p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
         {/* Timeline - Stage History */}
         <div className="rounded-lg border border-border bg-card p-4">
           <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
@@ -225,10 +323,8 @@ export default function ProspectionDetailPage() {
             <p className="text-xs text-muted-foreground">Nenhuma mudança registrada.</p>
           ) : (
             <div className="relative space-y-0">
-              {/* Vertical line */}
               <div className="absolute left-[7px] top-2 bottom-2 w-px bg-border" />
-
-              {history.map((item, i) => {
+              {history.map((item) => {
                 const toInfo = getStageInfo(item.to_stage);
                 const fromInfo = item.from_stage ? getStageInfo(item.from_stage) : null;
                 return (
@@ -257,7 +353,7 @@ export default function ProspectionDetailPage() {
         <div className="rounded-lg border border-border bg-card p-4">
           <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
             <Bot className="h-3.5 w-3.5 text-primary" />
-            Ações do Agente
+            Histórico do Agente
           </h3>
 
           {agentMessages.length === 0 ? (

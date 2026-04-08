@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Loader2, Save } from "lucide-react";
+import { Loader2, Save, Bot } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -21,14 +21,7 @@ const DAYS = [
   { key: "sunday", label: "Dom" },
 ] as const;
 
-const DEFAULT_TEMPLATES = [
-  { key: "ask_qualification", description: "Pergunta sobre agendamento de qualificação", text: "Pessoal, conseguiram agendar a qualificação?" },
-  { key: "ask_qualification_result", description: "Pergunta sobre resultado da qualificação", text: "Como foi a qualificação hoje, deu tudo certo?" },
-  { key: "ask_proposal_date", description: "Pergunta sobre data para apresentar proposta", text: "Já temos data para apresentar a proposta?" },
-  { key: "ask_client_return", description: "Pergunta sobre retorno do cliente", text: "Pessoal, ainda sem retorno do cliente?" },
-  { key: "ask_phone_call", description: "Sugestão de contato por ligação", text: "Tentamos contato também por ligação?" },
-  { key: "followup_reinforcement", description: "Reforço de cobrança (24h sem resposta)", text: "Pessoal, passando aqui novamente. Alguma novidade sobre essa prospecção?" },
-];
+const DEFAULT_INSTRUCTIONS = `Você é Tiago, analista comercial da PWR Gestão. Seu papel é acompanhar grupos internos de prospecção e cobrar o avanço no funil comercial de forma direta e natural, como um humano faria. Seja incisivo mas não formal. Leia o contexto da conversa antes de agir — se o consultor disse que ia ligar na segunda, pergunte se ligou. Se o prospecto ficou de dar retorno numa data, pergunte se deu. Nunca mande mensagem genérica — sempre contextualize com o que foi dito no grupo. Se o grupo está avançando normalmente, não interfira.`;
 
 interface ScheduleConfig {
   id?: string;
@@ -43,13 +36,7 @@ interface ScheduleConfig {
   check_time_1: string;
   check_time_2: string;
   check_time_3: string;
-}
-
-interface MessageTemplate {
-  id?: string;
-  template_key: string;
-  template_text: string;
-  description: string | null;
+  agent_instructions: string;
 }
 
 export default function SettingsPage() {
@@ -62,23 +49,20 @@ export default function SettingsPage() {
     monday: true, tuesday: true, wednesday: true, thursday: true, friday: true,
     saturday: false, sunday: false,
     check_time_1: "08:00", check_time_2: "12:00", check_time_3: "15:00",
+    agent_instructions: DEFAULT_INSTRUCTIONS,
   });
-  const [templates, setTemplates] = useState<MessageTemplate[]>([]);
   const [savingSchedule, setSavingSchedule] = useState(false);
-  const [savingTemplates, setSavingTemplates] = useState(false);
+  const [savingInstructions, setSavingInstructions] = useState(false);
   const [loadingConfig, setLoadingConfig] = useState(true);
 
   useEffect(() => {
     if (!org) return;
 
     const fetchConfig = async () => {
-      const [schedRes, templRes] = await Promise.all([
-        supabase.from("agent_schedule_config").select("*").eq("org_id", org.id).maybeSingle(),
-        supabase.from("agent_message_templates").select("*").eq("org_id", org.id),
-      ]);
+      const { data } = await supabase.from("agent_schedule_config").select("*").eq("org_id", org.id).maybeSingle();
 
-      if (schedRes.data) {
-        const d = schedRes.data as any;
+      if (data) {
+        const d = data as any;
         setSchedule({
           id: d.id,
           is_active: d.is_active,
@@ -87,22 +71,8 @@ export default function SettingsPage() {
           check_time_1: d.check_time_1?.slice(0, 5) || "08:00",
           check_time_2: d.check_time_2?.slice(0, 5) || "12:00",
           check_time_3: d.check_time_3?.slice(0, 5) || "15:00",
+          agent_instructions: d.agent_instructions || DEFAULT_INSTRUCTIONS,
         });
-      }
-
-      if (templRes.data && templRes.data.length > 0) {
-        setTemplates(templRes.data.map((t: any) => ({
-          id: t.id,
-          template_key: t.template_key,
-          template_text: t.template_text,
-          description: t.description,
-        })));
-      } else {
-        setTemplates(DEFAULT_TEMPLATES.map(t => ({
-          template_key: t.key,
-          template_text: t.text,
-          description: t.description,
-        })));
       }
 
       setLoadingConfig(false);
@@ -126,7 +96,7 @@ export default function SettingsPage() {
       if (schedule.id) {
         await supabase.from("agent_schedule_config").update(payload).eq("id", schedule.id);
       } else {
-        const { data } = await supabase.from("agent_schedule_config").insert(payload).select("id").single();
+        const { data } = await supabase.from("agent_schedule_config").insert({ ...payload, agent_instructions: schedule.agent_instructions }).select("id").single();
         if (data) setSchedule(prev => ({ ...prev, id: (data as any).id }));
       }
       toast.success("Horários do agente salvos!");
@@ -137,30 +107,26 @@ export default function SettingsPage() {
     }
   };
 
-  const handleSaveTemplates = async () => {
+  const handleSaveInstructions = async () => {
     if (!org) return;
-    setSavingTemplates(true);
+    setSavingInstructions(true);
     try {
-      for (const t of templates) {
-        if (t.id) {
-          await supabase.from("agent_message_templates").update({
-            template_text: t.template_text,
-          }).eq("id", t.id);
-        } else {
-          const { data } = await supabase.from("agent_message_templates").insert({
-            org_id: org.id,
-            template_key: t.template_key,
-            template_text: t.template_text,
-            description: t.description,
-          }).select("id").single();
-          if (data) t.id = (data as any).id;
-        }
+      if (schedule.id) {
+        await supabase.from("agent_schedule_config").update({
+          agent_instructions: schedule.agent_instructions,
+        }).eq("id", schedule.id);
+      } else {
+        const { data } = await supabase.from("agent_schedule_config").insert({
+          org_id: org.id,
+          agent_instructions: schedule.agent_instructions,
+        }).select("id").single();
+        if (data) setSchedule(prev => ({ ...prev, id: (data as any).id }));
       }
-      toast.success("Mensagens padrão salvas!");
+      toast.success("Instruções do agente salvas!");
     } catch {
-      toast.error("Erro ao salvar mensagens");
+      toast.error("Erro ao salvar instruções");
     } finally {
-      setSavingTemplates(false);
+      setSavingInstructions(false);
     }
   };
 
@@ -176,7 +142,7 @@ export default function SettingsPage() {
         <TabsList className="w-full grid grid-cols-3 mb-6">
           <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>
           <TabsTrigger value="agent">Agente IA</TabsTrigger>
-          <TabsTrigger value="templates">Mensagens</TabsTrigger>
+          <TabsTrigger value="instructions">Instruções</TabsTrigger>
         </TabsList>
 
         {/* WhatsApp Tab */}
@@ -230,7 +196,6 @@ export default function SettingsPage() {
               </div>
             ) : (
               <>
-                {/* Days */}
                 <div className="mb-5">
                   <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-2 block">Dias da semana</label>
                   <div className="flex gap-1.5 flex-wrap">
@@ -250,7 +215,6 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                {/* Times */}
                 <div className="mb-4">
                   <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-2 block">Horários de checagem</label>
                   <div className="grid grid-cols-3 gap-3">
@@ -281,12 +245,17 @@ export default function SettingsPage() {
           </section>
         </TabsContent>
 
-        {/* Message Templates Tab */}
-        <TabsContent value="templates" className="space-y-4">
+        {/* Agent Instructions Tab */}
+        <TabsContent value="instructions" className="space-y-4">
           <section className="rounded-lg border border-border bg-card p-4">
             <div className="mb-4">
-              <h3 className="text-sm font-semibold text-foreground">Mensagens Padrão do Agente</h3>
-              <p className="text-[10px] text-muted-foreground">Customize as mensagens que o agente dispara nos grupos</p>
+              <div className="flex items-center gap-2 mb-1">
+                <Bot className="h-4 w-4 text-primary" />
+                <h3 className="text-sm font-semibold text-foreground">Instruções do Agente</h3>
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                Defina a personalidade e comportamento do agente. Ele usará essas instruções para decidir como e quando interagir nos grupos.
+              </p>
             </div>
 
             {loadingConfig ? (
@@ -295,28 +264,25 @@ export default function SettingsPage() {
               </div>
             ) : (
               <>
-                <div className="space-y-4">
-                  {templates.map((t, i) => (
-                    <div key={t.template_key} className="space-y-1">
-                      <label className="text-xs font-medium text-foreground">{t.description || t.template_key}</label>
-                      <textarea
-                        value={t.template_text}
-                        onChange={(e) => {
-                          const updated = [...templates];
-                          updated[i] = { ...updated[i], template_text: e.target.value };
-                          setTemplates(updated);
-                        }}
-                        rows={2}
-                        className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring resize-none"
-                      />
-                    </div>
-                  ))}
+                <textarea
+                  value={schedule.agent_instructions}
+                  onChange={(e) => setSchedule(prev => ({ ...prev, agent_instructions: e.target.value }))}
+                  rows={10}
+                  placeholder="Descreva como o agente deve se comportar..."
+                  className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring resize-none leading-relaxed"
+                />
+                <div className="flex items-center justify-between mt-3">
+                  <button
+                    onClick={() => setSchedule(prev => ({ ...prev, agent_instructions: DEFAULT_INSTRUCTIONS }))}
+                    className="text-[10px] text-muted-foreground hover:text-foreground transition-colors underline"
+                  >
+                    Restaurar padrão
+                  </button>
+                  <Button size="sm" className="gap-1.5 text-xs" onClick={handleSaveInstructions} disabled={savingInstructions}>
+                    {savingInstructions ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                    Salvar Instruções
+                  </Button>
                 </div>
-
-                <Button size="sm" className="gap-1.5 text-xs mt-4" onClick={handleSaveTemplates} disabled={savingTemplates}>
-                  {savingTemplates ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
-                  Salvar Mensagens
-                </Button>
               </>
             )}
           </section>
