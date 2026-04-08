@@ -1,7 +1,7 @@
 import { ReactNode, useState, useEffect, createContext, useContext } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Link, useLocation } from "react-router-dom";
-import { LayoutDashboard, Settings, LogOut, Users, PanelLeftClose, PanelLeft, Menu, X, Sun, Moon, BarChart3, Target } from "lucide-react";
+import { LayoutDashboard, Settings, LogOut, Users, PanelLeftClose, PanelLeft, Menu, X, Sun, Moon, BarChart3, Target, MessageSquare } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useAuth } from "@/hooks/useAuth";
 import { useOrganization } from "@/hooks/useOrganization";
@@ -16,6 +16,7 @@ function profileInitials(profile: { full_name: string | null } | null | undefine
 
 const navItems = [
   { icon: LayoutDashboard, label: "Pipeline", path: "/" },
+  { icon: MessageSquare, label: "Grupos", path: "/groups" },
   { icon: BarChart3, label: "Relatórios", path: "/reports" },
   { icon: Users, label: "Equipe", path: "/team" },
   { icon: Settings, label: "Configurações", path: "/settings" },
