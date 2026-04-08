@@ -14,6 +14,44 @@ export type Database = {
   }
   public: {
     Tables: {
+      agent_message_templates: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          org_id: string
+          template_key: string
+          template_text: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          org_id: string
+          template_key: string
+          template_text: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          org_id?: string
+          template_key?: string
+          template_text?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_message_templates_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       agent_messages: {
         Row: {
           created_at: string
@@ -112,6 +150,68 @@ export type Database = {
             columns: ["prospection_group_id"]
             isOneToOne: false
             referencedRelation: "prospection_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agent_schedule_config: {
+        Row: {
+          check_time_1: string
+          check_time_2: string
+          check_time_3: string
+          created_at: string
+          friday: boolean
+          id: string
+          is_active: boolean
+          monday: boolean
+          org_id: string
+          saturday: boolean
+          sunday: boolean
+          thursday: boolean
+          tuesday: boolean
+          updated_at: string
+          wednesday: boolean
+        }
+        Insert: {
+          check_time_1?: string
+          check_time_2?: string
+          check_time_3?: string
+          created_at?: string
+          friday?: boolean
+          id?: string
+          is_active?: boolean
+          monday?: boolean
+          org_id: string
+          saturday?: boolean
+          sunday?: boolean
+          thursday?: boolean
+          tuesday?: boolean
+          updated_at?: string
+          wednesday?: boolean
+        }
+        Update: {
+          check_time_1?: string
+          check_time_2?: string
+          check_time_3?: string
+          created_at?: string
+          friday?: boolean
+          id?: string
+          is_active?: boolean
+          monday?: boolean
+          org_id?: string
+          saturday?: boolean
+          sunday?: boolean
+          thursday?: boolean
+          tuesday?: boolean
+          updated_at?: string
+          wednesday?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_schedule_config_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
