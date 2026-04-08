@@ -14,6 +14,108 @@ export type Database = {
   }
   public: {
     Tables: {
+      agent_messages: {
+        Row: {
+          created_at: string
+          delivered: boolean
+          id: string
+          message_text: string
+          message_type: string
+          org_id: string
+          prospection_group_id: string
+          sent_at: string
+          whatsapp_message_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          delivered?: boolean
+          id?: string
+          message_text: string
+          message_type?: string
+          org_id: string
+          prospection_group_id: string
+          sent_at?: string
+          whatsapp_message_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          delivered?: boolean
+          id?: string
+          message_text?: string
+          message_type?: string
+          org_id?: string
+          prospection_group_id?: string
+          sent_at?: string
+          whatsapp_message_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_messages_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_messages_prospection_group_id_fkey"
+            columns: ["prospection_group_id"]
+            isOneToOne: false
+            referencedRelation: "prospection_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agent_pending_followups: {
+        Row: {
+          created_at: string
+          followup_type: string
+          id: string
+          message_template: string | null
+          org_id: string
+          prospection_group_id: string
+          resolved_at: string | null
+          scheduled_for: string
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          followup_type: string
+          id?: string
+          message_template?: string | null
+          org_id: string
+          prospection_group_id: string
+          resolved_at?: string | null
+          scheduled_for: string
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          followup_type?: string
+          id?: string
+          message_template?: string | null
+          org_id?: string
+          prospection_group_id?: string
+          resolved_at?: string | null
+          scheduled_for?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_pending_followups_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_pending_followups_prospection_group_id_fkey"
+            columns: ["prospection_group_id"]
+            isOneToOne: false
+            referencedRelation: "prospection_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       analyses: {
         Row: {
           created_at: string
@@ -829,6 +931,116 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      prospection_groups: {
+        Row: {
+          assigned_consultants: string[] | null
+          created_at: string
+          current_stage: string
+          group_name: string
+          id: string
+          is_active: boolean
+          last_activity_at: string | null
+          last_agent_check_at: string | null
+          monitored_group_id: string | null
+          notes: string | null
+          org_id: string
+          priority: string
+          prospect_company: string | null
+          prospect_name: string | null
+          updated_at: string
+          whatsapp_group_id: string
+        }
+        Insert: {
+          assigned_consultants?: string[] | null
+          created_at?: string
+          current_stage?: string
+          group_name: string
+          id?: string
+          is_active?: boolean
+          last_activity_at?: string | null
+          last_agent_check_at?: string | null
+          monitored_group_id?: string | null
+          notes?: string | null
+          org_id: string
+          priority?: string
+          prospect_company?: string | null
+          prospect_name?: string | null
+          updated_at?: string
+          whatsapp_group_id: string
+        }
+        Update: {
+          assigned_consultants?: string[] | null
+          created_at?: string
+          current_stage?: string
+          group_name?: string
+          id?: string
+          is_active?: boolean
+          last_activity_at?: string | null
+          last_agent_check_at?: string | null
+          monitored_group_id?: string | null
+          notes?: string | null
+          org_id?: string
+          priority?: string
+          prospect_company?: string | null
+          prospect_name?: string | null
+          updated_at?: string
+          whatsapp_group_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prospection_groups_monitored_group_id_fkey"
+            columns: ["monitored_group_id"]
+            isOneToOne: false
+            referencedRelation: "monitored_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prospection_groups_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      prospection_stage_history: {
+        Row: {
+          changed_by: string | null
+          created_at: string
+          from_stage: string | null
+          id: string
+          prospection_group_id: string
+          reason: string | null
+          to_stage: string
+        }
+        Insert: {
+          changed_by?: string | null
+          created_at?: string
+          from_stage?: string | null
+          id?: string
+          prospection_group_id: string
+          reason?: string | null
+          to_stage: string
+        }
+        Update: {
+          changed_by?: string | null
+          created_at?: string
+          from_stage?: string | null
+          id?: string
+          prospection_group_id?: string
+          reason?: string | null
+          to_stage?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prospection_stage_history_prospection_group_id_fkey"
+            columns: ["prospection_group_id"]
+            isOneToOne: false
+            referencedRelation: "prospection_groups"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       resend_configs: {
         Row: {

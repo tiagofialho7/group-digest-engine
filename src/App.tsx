@@ -7,21 +7,15 @@ import { ThemeProvider } from "next-themes";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { useOrganization } from "@/hooks/useOrganization";
 import AppLayout from "@/components/AppLayout";
-import Dashboard from "@/pages/Dashboard";
-import GroupAnalysis from "@/pages/GroupAnalysis";
-import ChatContext from "@/pages/ChatContext";
+import ProspectionDashboard from "@/pages/ProspectionDashboard";
 import SettingsPage from "@/pages/SettingsPage";
-import SelectGroups from "@/pages/SelectGroups";
 import AuthPage from "@/pages/AuthPage";
 import ForgotPassword from "@/pages/ForgotPassword";
 import ResetPassword from "@/pages/ResetPassword";
 import OnboardingPage from "@/pages/OnboardingPage";
 import TeamPage from "@/pages/TeamPage";
 import InviteAcceptPage from "@/pages/InviteAcceptPage";
-import KnowledgePage from "@/pages/KnowledgePage";
-import KnowledgeDetailPage from "@/pages/KnowledgeDetailPage";
 import ProfilePage from "@/pages/ProfilePage";
-import SummariesPage from "@/pages/SummariesPage";
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
 
@@ -87,17 +81,11 @@ const App = () => (
               <Route path="/forgot-password" element={<AuthRoute><ForgotPassword /></AuthRoute>} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/onboarding" element={<OnboardingRoute><OnboardingPage /></OnboardingRoute>} />
-              <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-              <Route path="/group/:groupId" element={<ProtectedRoute><GroupAnalysis /></ProtectedRoute>} />
-              <Route path="/chat/:groupId/:contextId" element={<ProtectedRoute><ChatContext /></ProtectedRoute>} />
+              <Route path="/" element={<ProtectedRoute><ProspectionDashboard /></ProtectedRoute>} />
               <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
               <Route path="/team" element={<ProtectedRoute><TeamPage /></ProtectedRoute>} />
               <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
-              <Route path="/summaries" element={<ProtectedRoute><SummariesPage /></ProtectedRoute>} />
-              <Route path="/knowledge" element={<ProtectedRoute><KnowledgePage /></ProtectedRoute>} />
-              <Route path="/knowledge/:kbId" element={<ProtectedRoute><KnowledgeDetailPage /></ProtectedRoute>} />
               <Route path="/invite/:token" element={<InviteAcceptPage />} />
-              <Route path="/select-groups" element={<ProtectedRoute><SelectGroups /></ProtectedRoute>} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>
