@@ -377,9 +377,10 @@ export default function ProspectionDetailPage() {
                         {fromInfo ? `${fromInfo.shortLabel} → ${toInfo.shortLabel}` : toInfo.label}
                       </p>
                       {item.reason && <p className="text-[10px] text-muted-foreground mt-0.5">{item.reason}</p>}
-                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                      <p className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-1">
+                        {item.changed_by === "agent" && <Bot className="h-3 w-3 text-primary" />}
                         {new Date(item.created_at).toLocaleDateString("pt-BR")} às {new Date(item.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
-                        {item.changed_by && ` · ${item.changed_by}`}
+                        {item.changed_by && ` · ${item.changed_by === "agent" ? "Agente IA" : item.changed_by}`}
                       </p>
                     </div>
                   </div>
