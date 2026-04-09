@@ -10,6 +10,7 @@ import { useEvolutionConfig } from "@/hooks/useEvolutionConfig";
 import { toast } from "sonner";
 import { EvolutionApiConfig } from "@/components/settings/EvolutionApiConfig";
 import { WhatsAppInstancesManager } from "@/components/settings/WhatsAppInstancesManager";
+import { AgentBatchReport } from "@/components/settings/AgentBatchReport";
 
 const DAYS = [
   { key: "monday", label: "Seg" },
