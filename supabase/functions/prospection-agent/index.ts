@@ -10,7 +10,7 @@ const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 const AI_MODEL = "claude-haiku-4-5-20251001";
 const DEFAULT_BATCH_SIZE = 5;
 const DELAY_BETWEEN_GROUPS_MS = 500;
-const RETRY_DELAY_MS = 10000;
+const RETRY_DELAY_MS = 15000;
 const TIAGO_PHONE_NUMBERS = ["5585815536698", "558581553698", "+5585815536698", "+558581553698"];
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
