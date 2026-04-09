@@ -9,6 +9,10 @@ const corsHeaders = {
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 const AI_MODEL = "claude-haiku-4-5-20251001";
 const BATCH_SIZE = 5;
+const DELAY_BETWEEN_GROUPS_MS = 1500;
+const RETRY_DELAY_MS = 5000;
+
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 const stageMap: Record<string, string> = {
   pre_qualification: "Pré-Qualificação",
@@ -136,8 +140,8 @@ DATA/HORA ATUAL: ${new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_P
 Baseado no contexto acima, você deve enviar alguma mensagem agora? Se sim, qual?
 Responda APENAS em JSON válido: { "should_send": boolean, "message": string | null, "reasoning": string, "context_summary": string, "pending_actions": string, "key_dates": string }`;
 
-    // Call Anthropic Claude
-    const aiRes = await fetch(ANTHROPIC_API_URL, {
+    // Call Anthropic Claude with retry on 429
+    const makeAiCall = () => fetch(ANTHROPIC_API_URL, {
       method: "POST",
       headers: {
         "x-api-key": anthropicKey,
@@ -169,6 +173,13 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
         tool_choice: { type: "tool", name: "agent_decision" },
       }),
     });
+
+    let aiRes = await makeAiCall();
+    if (aiRes.status === 429) {
+      console.warn(`[${group.group_name}] Rate limited (429), retrying in ${RETRY_DELAY_MS}ms...`);
+      await delay(RETRY_DELAY_MS);
+      aiRes = await makeAiCall();
+    }
 
     if (!aiRes.ok) {
       const errText = await aiRes.text();
@@ -445,14 +456,17 @@ serve(async (req) => {
     let lastDecisionDebug: any = null;
     const errors: string[] = [];
 
-    // Process in parallel batches
+    // Process in sequential batches with delay between groups
     for (let i = 0; i < groups.length; i += BATCH_SIZE) {
       const batch = groups.slice(i, i + BATCH_SIZE);
       console.log(`[AGENT] Batch ${Math.floor(i / BATCH_SIZE) + 1}: processing ${batch.map(g => g.group_name).join(", ")}`);
 
-      const results = await Promise.all(
-        batch.map(group => processGroup(group, supabaseAdmin, evoConfig, apiKey, anthropicKey, instance, agentInstructions, orgId))
-      );
+      const results: GroupResult[] = [];
+      for (const group of batch) {
+        const r = await processGroup(group, supabaseAdmin, evoConfig, apiKey, anthropicKey, instance, agentInstructions, orgId);
+        results.push(r);
+        await delay(DELAY_BETWEEN_GROUPS_MS);
+      }
 
       for (const r of results) {
         totalMessagesSent += r.messagesSent;
