@@ -262,6 +262,7 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
     result.decision = {
       group_id: group.id,
       group_name: group.group_name,
+      modelo_usado: AI_MODEL,
       reasoning: decision.reasoning,
       suggested_stage: suggestedStage,
       current_stage: group.current_stage,
