@@ -11,7 +11,7 @@ interface BatchReport {
   message_sent: string | null;
   stage_before: string | null;
   stage_after: string | null;
-  reasoning: string;
+  reasoning: string | null;
   processed_at: string;
 }
 
@@ -44,7 +44,7 @@ export function AgentBatchReport({ orgId }: { orgId: string }) {
   const fetchLatestReport = async () => {
     setLoading(true);
     // Get latest execution_id
-    const { data: latest } = await supabase
+    const { data: latest, error: latestErr } = await supabase
       .from("agent_batch_reports")
       .select("execution_id")
       .eq("org_id", orgId)
@@ -52,18 +52,26 @@ export function AgentBatchReport({ orgId }: { orgId: string }) {
       .limit(1)
       .maybeSingle();
 
+    if (latestErr) {
+      console.error("[AgentBatchReport] Error fetching latest:", latestErr);
+    }
+
     if (!latest) {
       setLoading(false);
       return;
     }
 
     // Fetch all reports for that execution
-    const { data } = await supabase
+    const { data, error: reportsErr } = await supabase
       .from("agent_batch_reports")
       .select("*")
       .eq("execution_id", latest.execution_id)
       .order("batch_number", { ascending: true })
       .order("processed_at", { ascending: true });
+
+    if (reportsErr) {
+      console.error("[AgentBatchReport] Error fetching reports:", reportsErr);
+    }
 
     setReports((data as any[]) || []);
     setLoading(false);
