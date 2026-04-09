@@ -155,11 +155,8 @@ async function processGroup(
     const tiagoCheck = checkTiagoIntervention(whatsappMessages);
     let tiagoSection = "";
     if (tiagoCheck.tiagoSent) {
-      tiagoSection = `\nINTERVENÇÃO HUMANA: Tiago humano cobrou às ${tiagoCheck.tiagoTime}. Consultores responderam após: ${tiagoCheck.consultantRespondedAfter ? "sim" : "não"}.`;
-      if (tiagoCheck.consultantRespondedAfter) {
-        tiagoSection += "\nCOMO JÁ HOUVE COBRANÇA HUMANA E RESPOSTA, NÃO envie mensagem neste grupo agora.";
-      }
-      console.log(`[TIAGO CHECK] ${group.group_name}: tiagoSent=${tiagoCheck.tiagoSent}, responded=${tiagoCheck.consultantRespondedAfter}`);
+      tiagoSection = `\nREGRA ABSOLUTA — TIAGO HUMANO: Tiago humano enviou mensagem às ${tiagoCheck.tiagoTime} (últimas 24h). O agente NÃO PODE enviar mensagem neste grupo. should_send DEVE ser false. Período de 24h é inegociável.`;
+      console.log(`[TIAGO CHECK] ${group.group_name}: tiagoSent=true às ${tiagoCheck.tiagoTime} — bloqueando envio`);
     }
 
     const agentHistory = (prevAgentMsgs || []).map((m: any) =>
