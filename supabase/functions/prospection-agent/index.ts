@@ -34,6 +34,37 @@ interface GroupResult {
   decision?: any;
 }
 
+async function checkTiagoIntervention(
+  whatsappMessages: any[],
+): { tiagoSent: boolean; tiagoTime: string | null; consultantRespondedAfter: boolean } {
+  let tiagoSent = false;
+  let tiagoTime: string | null = null;
+  let consultantRespondedAfter = false;
+  let tiagoTimestamp = 0;
+
+  for (const m of whatsappMessages) {
+    const senderPhone = m.key?.participant || m.participant || "";
+    const cleanPhone = senderPhone.replace(/[@\+\s\-]/g, "").replace(/@.*/, "");
+    const msgTimestamp = m.messageTimestamp ? Number(m.messageTimestamp) * 1000 : 0;
+    const is24hAgo = msgTimestamp > Date.now() - 24 * 60 * 60 * 1000;
+
+    if (is24hAgo && TIAGO_PHONE_NUMBERS.some(t => cleanPhone.includes(t.replace(/[\+\-\s]/g, "")))) {
+      tiagoSent = true;
+      tiagoTimestamp = msgTimestamp;
+      tiagoTime = new Date(msgTimestamp).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo" });
+    }
+
+    // Check if any non-Tiago message came after Tiago's last message
+    if (tiagoTimestamp && msgTimestamp > tiagoTimestamp && !TIAGO_PHONE_NUMBERS.some(t => cleanPhone.includes(t.replace(/[\+\-\s]/g, "")))) {
+      if (!m.key?.fromMe && cleanPhone) {
+        consultantRespondedAfter = true;
+      }
+    }
+  }
+
+  return { tiagoSent, tiagoTime, consultantRespondedAfter };
+}
+
 async function processGroup(
   group: any,
   supabaseAdmin: any,
