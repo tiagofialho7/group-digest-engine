@@ -284,10 +284,16 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
         }
 
         console.log("PARSED DECISION:", JSON.stringify(decision));
-        console.log("SUGGESTED STAGE:", decision.suggested_stage);
+
+        // Normalize suggested_stage: treat empty string, "none", "null", undefined as null
+        const rawStage = decision.suggested_stage;
+        const suggestedStage = (rawStage && rawStage !== "none" && rawStage !== "null" && rawStage.trim() !== "") ? rawStage.trim() : null;
+
+        console.log("RAW SUGGESTED STAGE:", JSON.stringify(rawStage));
+        console.log("NORMALIZED SUGGESTED STAGE:", suggestedStage);
         console.log("CURRENT STAGE:", group.current_stage);
-        console.log("STAGE COMPARISON:", decision.suggested_stage === group.current_stage ? "equal" : "different");
-        console.log(`Group ${group.group_name}: should_send=${decision.should_send}, reasoning=${decision.reasoning}, suggested_stage=${decision.suggested_stage || "none"}`);
+        console.log("STAGE COMPARISON:", suggestedStage === group.current_stage ? "equal" : (suggestedStage ? "different" : "no suggestion"));
+        console.log(`Group ${group.group_name}: should_send=${decision.should_send}, reasoning=${decision.reasoning}, suggested_stage=${suggestedStage || "none"}`);
 
         // 10. Save/update context memory
         if (decision.context_summary || decision.pending_actions || decision.key_dates) {
@@ -315,13 +321,13 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
 
         let stageUpdated = false;
         const validStages = ["pre_qualification", "contact_made", "visit_done", "project_elaborated", "project_presented", "deal_won", "deal_lost"];
-        if (decision.suggested_stage && validStages.includes(decision.suggested_stage) && decision.suggested_stage !== group.current_stage) {
-          console.log(`[STAGE] Advancing ${group.group_name}: ${group.current_stage} → ${decision.suggested_stage}`);
+        if (suggestedStage && validStages.includes(suggestedStage) && suggestedStage !== group.current_stage) {
+          console.log(`[STAGE] Advancing ${group.group_name}: ${group.current_stage} → ${suggestedStage}`);
 
           const { error: stageError } = await supabaseAdmin
             .from("prospection_groups")
             .update({
-              current_stage: decision.suggested_stage,
+              current_stage: suggestedStage,
               updated_at: new Date().toISOString(),
             })
             .eq("id", group.id);
@@ -330,14 +336,14 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
             console.error(`[STAGE ERROR] Failed to update stage for ${group.group_name}:`, stageError);
             errors.push(`Stage update failed for ${group.group_name}: ${stageError.message}`);
           } else {
-            console.log(`[STAGE OK] Stage updated: ${group.group_name} → ${decision.suggested_stage}`);
+            console.log(`[STAGE OK] Stage updated: ${group.group_name} → ${suggestedStage}`);
 
             const { error: historyError } = await supabaseAdmin
               .from("prospection_stage_history")
               .insert({
                 prospection_group_id: group.id,
                 from_stage: group.current_stage,
-                to_stage: decision.suggested_stage,
+                to_stage: suggestedStage,
                 changed_by: "agent",
                 reason: decision.reasoning,
               });
@@ -356,7 +362,7 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
           group_id: group.id,
           group_name: group.group_name,
           reasoning: decision.reasoning,
-          suggested_stage: decision.suggested_stage || null,
+          suggested_stage: suggestedStage,
           current_stage: group.current_stage,
           stage_updated: stageUpdated,
           should_send: decision.should_send,
