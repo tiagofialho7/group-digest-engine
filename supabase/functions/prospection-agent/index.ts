@@ -7,6 +7,7 @@ const corsHeaders = {
 };
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
+const AI_MODEL = "claude-haiku-4-5-20251001";
 const BATCH_SIZE = 5;
 
 const stageMap: Record<string, string> = {
@@ -41,6 +42,8 @@ async function processGroup(
   const result: GroupResult = { messagesSent: 0, stageUpdated: false };
 
   try {
+    console.log(`[${group.group_name}] MODELO EM USO: ${AI_MODEL} (Anthropic Claude)`);
+
     if (group.current_stage === "deal_won" || group.current_stage === "deal_lost") {
       console.log(`Group ${group.group_name}: skipped — deal finalized (${group.current_stage})`);
       return result;
@@ -142,7 +145,7 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
+        model: AI_MODEL,
         max_tokens: 1000,
         system: agentInstructions,
         messages: [{ role: "user", content: userPrompt }],
@@ -202,6 +205,7 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
     const rawStage = decision.suggested_stage;
     const suggestedStage = (rawStage && rawStage !== "none" && rawStage !== "null" && String(rawStage).trim() !== "") ? String(rawStage).trim() : null;
 
+    console.log(`[${group.group_name}] DECISION PARSED:`, JSON.stringify(decision));
     console.log("[STAGE]", group.group_name, "current:", group.current_stage, "suggested:", suggestedStage);
     console.log(`[${group.group_name}] should_send=${decision.should_send}, reasoning=${decision.reasoning?.substring(0, 100)}`);
 
@@ -259,6 +263,7 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
     result.decision = {
       group_id: group.id,
       group_name: group.group_name,
+      modelo_usado: AI_MODEL,
       reasoning: decision.reasoning,
       suggested_stage: suggestedStage,
       current_stage: group.current_stage,
