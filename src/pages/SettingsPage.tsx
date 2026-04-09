@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Loader2, Save, Bot, Play, CheckCircle, AlertTriangle, Clock, Copy } from "lucide-react";
+import { Loader2, Save, Bot, Play, CheckCircle, AlertTriangle, Clock, Copy, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -10,6 +10,7 @@ import { useEvolutionConfig } from "@/hooks/useEvolutionConfig";
 import { toast } from "sonner";
 import { EvolutionApiConfig } from "@/components/settings/EvolutionApiConfig";
 import { WhatsAppInstancesManager } from "@/components/settings/WhatsAppInstancesManager";
+import { AgentBatchReport } from "@/components/settings/AgentBatchReport";
 
 const DAYS = [
   { key: "monday", label: "Seg" },
@@ -305,6 +306,14 @@ export default function SettingsPage() {
             )}
           </section>
 
+          {/* Batch Execution Report */}
+          <section className="rounded-lg border border-border bg-card p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <FileText className="h-4 w-4 text-primary" />
+              <h3 className="text-sm font-semibold text-foreground">Relatório da Última Execução</h3>
+            </div>
+            <AgentBatchReport orgId={org.id} />
+          </section>
           {/* Schedule config */}
           <section className="rounded-lg border border-border bg-card p-4">
             <div className="flex items-center justify-between mb-4">

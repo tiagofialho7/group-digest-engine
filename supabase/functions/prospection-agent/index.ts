@@ -8,7 +8,7 @@ const corsHeaders = {
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 const AI_MODEL = "claude-haiku-4-5-20251001";
-const BATCH_SIZE = 5;
+const DEFAULT_BATCH_SIZE = 10;
 const DELAY_BETWEEN_GROUPS_MS = 2000;
 const RETRY_DELAY_MS = 10000;
 const TIAGO_PHONE_NUMBERS = ["5585815536698", "558581553698", "+5585815536698", "+558581553698"];
@@ -451,12 +451,18 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const { orgId, groupId, limit: queryLimit, offset: queryOffset } = await req.json();
+    const body = await req.json();
+    const { orgId, groupId, batch_size, offset, execution_id, batch_number } = body;
     if (!orgId) {
       return new Response(JSON.stringify({ error: "Missing orgId" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    const effectiveBatchSize = batch_size || DEFAULT_BATCH_SIZE;
+    const effectiveOffset = offset || 0;
+    const executionId = execution_id || crypto.randomUUID();
+    const currentBatchNumber = batch_number || 1;
 
     // Fetch configs in parallel
     const [evoConfigRes, anthropicKeyRes, instanceRes, schedConfigRes] = await Promise.all([
@@ -500,7 +506,7 @@ serve(async (req) => {
 
     const agentInstructions = (schedConfigRes.data as any)?.agent_instructions || "Você é um analista comercial.";
 
-    // Fetch prospection groups with pagination — only groups not checked in last 3 hours
+    // Fetch prospection groups — only this batch
     const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
     let groupsQuery = supabaseAdmin
       .from("prospection_groups")
@@ -513,52 +519,80 @@ serve(async (req) => {
     if (groupId) {
       groupsQuery = groupsQuery.eq("id", groupId);
     } else {
-      // Only process groups not checked recently (unless specific group requested)
       groupsQuery = groupsQuery.or(`last_agent_check_at.is.null,last_agent_check_at.lt.${threeHoursAgo}`);
     }
 
-    const effectiveLimit = queryLimit || 50;
-    const effectiveOffset = queryOffset || 0;
-    groupsQuery = groupsQuery.range(effectiveOffset, effectiveOffset + effectiveLimit - 1);
-
+    groupsQuery = groupsQuery.range(effectiveOffset, effectiveOffset + effectiveBatchSize - 1);
     const { data: groups } = await groupsQuery;
 
     if (!groups || groups.length === 0) {
+      // No more groups — this is the final batch, log execution
+      if (currentBatchNumber > 1) {
+        console.log(`[AGENT] Batch ${currentBatchNumber}: no more groups. Execution ${executionId} complete.`);
+      }
+      const executionTimestamp = new Date().toISOString();
       await supabaseAdmin.from("agent_execution_logs").insert({
         org_id: orgId, groups_checked: 0, messages_sent: 0, status: "success",
+        executed_at: executionTimestamp,
       });
-      return new Response(JSON.stringify({ groups_checked: 0, messages_sent: 0, stage_updates: 0 }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      await supabaseAdmin.from("agent_schedule_config").update({ updated_at: executionTimestamp }).eq("org_id", orgId);
+
+      return new Response(JSON.stringify({
+        execution_id: executionId,
+        batch_number: currentBatchNumber,
+        groups_checked: 0, messages_sent: 0, stage_updates: 0,
+        completed: true,
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    console.log(`[AGENT] Processing ${groups.length} groups (offset=${effectiveOffset}, limit=${effectiveLimit}) in batches of ${BATCH_SIZE}`);
+    console.log(`[AGENT] Batch ${currentBatchNumber}: processing ${groups.length} groups (offset=${effectiveOffset})`);
 
     let totalMessagesSent = 0;
     let stageUpdates = 0;
-    let lastDecisionDebug: any = null;
     const errors: string[] = [];
+    const batchReports: any[] = [];
 
-    // Process in sequential batches with delay between groups
-    for (let i = 0; i < groups.length; i += BATCH_SIZE) {
-      const batch = groups.slice(i, i + BATCH_SIZE);
-      console.log(`[AGENT] Batch ${Math.floor(i / BATCH_SIZE) + 1}: processing ${batch.map(g => g.group_name).join(", ")}`);
+    // Process groups sequentially with delay
+    for (const group of groups) {
+      const stageBefore = group.current_stage;
+      const r = await processGroup(group, supabaseAdmin, evoConfig, apiKey, anthropicKey, instance, agentInstructions, orgId);
 
-      const results: GroupResult[] = [];
-      for (const group of batch) {
-        const r = await processGroup(group, supabaseAdmin, evoConfig, apiKey, anthropicKey, instance, agentInstructions, orgId);
-        results.push(r);
-        await delay(DELAY_BETWEEN_GROUPS_MS);
-      }
+      totalMessagesSent += r.messagesSent;
+      if (r.stageUpdated) stageUpdates++;
+      if (r.error) errors.push(r.error);
 
-      for (const r of results) {
-        totalMessagesSent += r.messagesSent;
-        if (r.stageUpdated) stageUpdates++;
-        if (r.error) errors.push(r.error);
-        if (r.decision) lastDecisionDebug = r.decision;
-      }
+      // Determine action and stage_after
+      let action = "sem_acao";
+      if (r.error) action = "erro";
+      else if (r.messagesSent > 0) action = "mensagem_enviada";
+
+      const stageAfter = r.decision?.suggested_stage && r.stageUpdated
+        ? r.decision.suggested_stage
+        : null;
+
+      batchReports.push({
+        org_id: orgId,
+        execution_id: executionId,
+        batch_number: currentBatchNumber,
+        group_name: group.group_name,
+        action,
+        message_sent: r.decision?.should_send ? r.decision?.message || null : null,
+        stage_before: stageBefore,
+        stage_after: stageAfter,
+        reasoning: r.decision?.reasoning || r.error || "",
+        processed_at: new Date().toISOString(),
+      });
+
+      await delay(DELAY_BETWEEN_GROUPS_MS);
     }
 
+    // Insert batch reports
+    if (batchReports.length > 0) {
+      const { error: reportErr } = await supabaseAdmin.from("agent_batch_reports").insert(batchReports);
+      if (reportErr) console.error("[BATCH REPORTS] Insert error:", reportErr);
+    }
+
+    // Log this batch execution
     const executionTimestamp = new Date().toISOString();
     await supabaseAdmin.from("agent_execution_logs").insert({
       org_id: orgId,
@@ -568,26 +602,51 @@ serve(async (req) => {
       error_log: errors.length > 0 ? errors.join("; ") : null,
       executed_at: executionTimestamp,
     });
+    await supabaseAdmin.from("agent_schedule_config").update({ updated_at: executionTimestamp }).eq("org_id", orgId);
 
-    // Update schedule config with last execution time
-    await supabaseAdmin
-      .from("agent_schedule_config")
-      .update({ updated_at: executionTimestamp })
-      .eq("org_id", orgId);
+    // Check if there are more groups — if so, invoke self for next batch
+    const hasMore = groups.length === effectiveBatchSize;
+    let nextBatchTriggered = false;
 
-    const hasMore = groups.length === effectiveLimit;
+    if (hasMore && !groupId) {
+      console.log(`[AGENT] Batch ${currentBatchNumber} done. Triggering batch ${currentBatchNumber + 1}...`);
+      try {
+        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+        const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+        
+        const nextRes = await fetch(`${supabaseUrl}/functions/v1/prospection-agent`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${serviceRoleKey}`,
+          },
+          body: JSON.stringify({
+            orgId,
+            batch_size: effectiveBatchSize,
+            offset: effectiveOffset + effectiveBatchSize,
+            execution_id: executionId,
+            batch_number: currentBatchNumber + 1,
+          }),
+        });
+        nextBatchTriggered = nextRes.ok;
+        if (!nextRes.ok) {
+          console.error(`[AGENT] Failed to trigger batch ${currentBatchNumber + 1}: ${nextRes.status}`);
+        }
+      } catch (chainErr) {
+        console.error(`[AGENT] Error chaining batch ${currentBatchNumber + 1}:`, chainErr);
+      }
+    }
 
     return new Response(JSON.stringify({
+      execution_id: executionId,
+      batch_number: currentBatchNumber,
       groups_checked: groups.length,
       messages_sent: totalMessagesSent,
       stage_updates: stageUpdates,
-      last_decision: lastDecisionDebug || undefined,
-      has_more: hasMore,
-      next_offset: hasMore ? effectiveOffset + effectiveLimit : undefined,
+      completed: !hasMore,
+      next_batch_triggered: nextBatchTriggered,
       errors: errors.length > 0 ? errors : undefined,
-    }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
     console.error("prospection-agent error:", e);
     return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
