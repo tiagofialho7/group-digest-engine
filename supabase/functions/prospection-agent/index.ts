@@ -68,12 +68,27 @@ async function processGroup(
   const result: GroupResult = { messagesSent: 0, stageUpdated: false };
 
   try {
-    console.log(`[${group.group_name}] MODELO EM USO: ${AI_MODEL} (Anthropic Claude)`);
-
     if (group.current_stage === "deal_won" || group.current_stage === "deal_lost") {
       console.log(`Group ${group.group_name}: skipped — deal finalized (${group.current_stage})`);
       return result;
     }
+
+    // === REGRA 24H NO CÓDIGO: verificar se agente já enviou mensagem nas últimas 24h ===
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { data: recentAgentMsgs } = await supabaseAdmin
+      .from("agent_messages")
+      .select("id, sent_at")
+      .eq("prospection_group_id", group.id)
+      .gte("sent_at", twentyFourHoursAgo)
+      .limit(1);
+
+    if (recentAgentMsgs && recentAgentMsgs.length > 0) {
+      console.log(`[24H SKIP] ${group.group_name}: agente já enviou mensagem nas últimas 24h (${recentAgentMsgs[0].sent_at}) — pulando sem chamar IA`);
+      result.decision = { should_send: false, reasoning: "Cobrança do agente < 24h" };
+      return result;
+    }
+
+    console.log(`[${group.group_name}] MODELO EM USO: ${AI_MODEL} (Anthropic Claude)`);
 
     // Fetch saved context
     const { data: savedContext } = await supabaseAdmin
