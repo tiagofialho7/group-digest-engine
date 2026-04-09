@@ -204,6 +204,7 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
     const rawStage = decision.suggested_stage;
     const suggestedStage = (rawStage && rawStage !== "none" && rawStage !== "null" && String(rawStage).trim() !== "") ? String(rawStage).trim() : null;
 
+    console.log(`[${group.group_name}] DECISION PARSED:`, JSON.stringify(decision));
     console.log("[STAGE]", group.group_name, "current:", group.current_stage, "suggested:", suggestedStage);
     console.log(`[${group.group_name}] should_send=${decision.should_send}, reasoning=${decision.reasoning?.substring(0, 100)}`);
 
