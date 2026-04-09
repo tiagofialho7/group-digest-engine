@@ -161,6 +161,17 @@ async function processGroup(
 
     const typeSummary = `TIPOS DE MENSAGEM PRESENTES: [${messageTypes.join(", ")}]`;
 
+    // Check Tiago humano intervention
+    const tiagoCheck = checkTiagoIntervention(whatsappMessages);
+    let tiagoSection = "";
+    if (tiagoCheck.tiagoSent) {
+      tiagoSection = `\nINTERVENÇÃO HUMANA: Tiago humano cobrou às ${tiagoCheck.tiagoTime}. Consultores responderam após: ${tiagoCheck.consultantRespondedAfter ? "sim" : "não"}.`;
+      if (tiagoCheck.consultantRespondedAfter) {
+        tiagoSection += "\nCOMO JÁ HOUVE COBRANÇA HUMANA E RESPOSTA, NÃO envie mensagem neste grupo agora.";
+      }
+      console.log(`[TIAGO CHECK] ${group.group_name}: tiagoSent=${tiagoCheck.tiagoSent}, responded=${tiagoCheck.consultantRespondedAfter}`);
+    }
+
     const agentHistory = (prevAgentMsgs || []).map((m: any) =>
       `[${new Date(m.sent_at).toLocaleString("pt-BR")}] Agente (${m.message_type}): ${m.message_text}`
     ).join("\n");
