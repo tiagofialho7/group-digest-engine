@@ -288,6 +288,13 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
     const rawStage = decision.suggested_stage;
     const suggestedStage = (rawStage && rawStage !== "none" && rawStage !== "null" && String(rawStage).trim() !== "") ? String(rawStage).trim() : null;
 
+    // Override should_send if Tiago humano already handled it
+    if (tiagoCheck.tiagoSent && tiagoCheck.consultantRespondedAfter && decision.should_send) {
+      console.log(`[TIAGO OVERRIDE] ${group.group_name}: Tiago cobrou e consultores responderam — forçando should_send=false`);
+      decision.should_send = false;
+      decision.reasoning = (decision.reasoning || "") + " [OVERRIDE: Tiago humano já cobrou e houve resposta]";
+    }
+
     console.log(`[${group.group_name}] DECISION PARSED:`, JSON.stringify(decision));
     console.log("[STAGE]", group.group_name, "current:", group.current_stage, "suggested:", suggestedStage);
     console.log(`[${group.group_name}] should_send=${decision.should_send}, reasoning=${decision.reasoning?.substring(0, 100)}`);
