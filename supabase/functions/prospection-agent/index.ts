@@ -440,6 +440,9 @@ serve(async (req) => {
 
     const body = await req.json();
     const { orgId, groupId, batch_size, offset, execution_id, batch_number } = body;
+    
+    console.log("[AGENT STARTED]", { orgId, groupId, offset, batch_size, execution_id, batch_number });
+    
     if (!orgId) {
       return new Response(JSON.stringify({ error: "Missing orgId" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -450,6 +453,9 @@ serve(async (req) => {
     const effectiveOffset = offset || 0;
     const executionId = execution_id || crypto.randomUUID();
     const currentBatchNumber = batch_number || 1;
+    
+    // For continuation batches (offset > 0), skip the 3h filter since we're in the same execution
+    const isFirstBatch = effectiveOffset === 0 && !execution_id;
 
     // Fetch configs in parallel
     const [evoConfigRes, anthropicKeyRes, instanceRes, schedConfigRes] = await Promise.all([
@@ -494,7 +500,6 @@ serve(async (req) => {
     const agentInstructions = (schedConfigRes.data as any)?.agent_instructions || "Você é um analista comercial.";
 
     // Fetch prospection groups — only this batch
-    const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
     let groupsQuery = supabaseAdmin
       .from("prospection_groups")
       .select("id, group_name, current_stage, prospect_name, prospect_company, whatsapp_group_id, priority, notes, last_agent_check_at")
@@ -505,12 +510,16 @@ serve(async (req) => {
 
     if (groupId) {
       groupsQuery = groupsQuery.eq("id", groupId);
-    } else {
+    } else if (isFirstBatch) {
+      // Only apply 3h filter on fresh executions, not on continuation batches
+      const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
       groupsQuery = groupsQuery.or(`last_agent_check_at.is.null,last_agent_check_at.lt.${threeHoursAgo}`);
     }
 
     groupsQuery = groupsQuery.range(effectiveOffset, effectiveOffset + effectiveBatchSize - 1);
-    const { data: groups } = await groupsQuery;
+    const { data: groups, error: groupsError } = await groupsQuery;
+
+    console.log("[AGENT] GROUPS FOUND:", groups?.length, "offset:", effectiveOffset, "isFirstBatch:", isFirstBatch, "error:", groupsError?.message || "none");
 
     if (!groups || groups.length === 0) {
       // No more groups — this is the final batch, log execution
