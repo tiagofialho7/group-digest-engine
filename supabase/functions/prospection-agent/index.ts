@@ -232,40 +232,37 @@ DATA/HORA ATUAL: ${new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_P
 Baseado no contexto acima, você deve enviar alguma mensagem agora? Se sim, qual?
 Responda APENAS em JSON válido: { "should_send": boolean, "message": string | null, "reasoning": string, "context_summary": string, "pending_actions": string, "key_dates": string }`;
 
-        // 9. Call AI
-        const aiRes = await fetch(AI_GATEWAY, {
+        // 9. Call Anthropic Claude
+        const aiRes = await fetch(ANTHROPIC_API_URL, {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${LOVABLE_API_KEY}`,
+            "x-api-key": anthropicKey,
+            "anthropic-version": "2023-06-01",
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            model: "google/gemini-2.5-flash",
-            messages: [
-              { role: "system", content: agentInstructions },
-              { role: "user", content: userPrompt },
-            ],
+            model: "claude-haiku-4-5-20251001",
+            max_tokens: 1000,
+            system: agentInstructions,
+            messages: [{ role: "user", content: userPrompt }],
             tools: [{
-              type: "function",
-              function: {
-                name: "agent_decision",
-                description: "Decide whether to send a message to the prospection group and save context",
-                parameters: {
-                  type: "object",
-                  properties: {
-                    should_send: { type: "boolean", description: "Whether to send a message" },
-                    message: { type: "string", description: "The message to send, or null if should_send is false" },
-                    reasoning: { type: "string", description: "Brief reasoning for the decision" },
-                    suggested_stage: { type: "string", description: "If the conversation indicates the prospection moved to a new stage, provide the stage key. Otherwise omit." },
-                    context_summary: { type: "string", description: "Resumo conciso do estado atual desta prospecção (2-3 frases)" },
-                    pending_actions: { type: "string", description: "Ações pendentes identificadas, separadas por ponto-e-vírgula" },
-                    key_dates: { type: "string", description: "Datas/horários importantes mencionados, separados por ponto-e-vírgula" },
-                  },
-                  required: ["should_send", "reasoning", "context_summary", "pending_actions", "key_dates"],
+              name: "agent_decision",
+              description: "Decide whether to send a message to the prospection group and save context",
+              input_schema: {
+                type: "object",
+                properties: {
+                  should_send: { type: "boolean", description: "Whether to send a message" },
+                  message: { type: "string", description: "The message to send, or null if should_send is false" },
+                  reasoning: { type: "string", description: "Brief reasoning for the decision" },
+                  suggested_stage: { type: "string", description: "If the conversation indicates the prospection moved to a new stage, provide the stage key (pre_qualification, contact_made, visit_done, project_elaborated, project_presented, deal_won, deal_lost). Otherwise omit or set to null." },
+                  context_summary: { type: "string", description: "Resumo conciso do estado atual desta prospecção (2-3 frases)" },
+                  pending_actions: { type: "string", description: "Ações pendentes identificadas, separadas por ponto-e-vírgula" },
+                  key_dates: { type: "string", description: "Datas/horários importantes mencionados, separados por ponto-e-vírgula" },
                 },
+                required: ["should_send", "reasoning", "context_summary", "pending_actions", "key_dates"],
               },
             }],
-            tool_choice: { type: "function", function: { name: "agent_decision" } },
+            tool_choice: { type: "tool", name: "agent_decision" },
           }),
         });
 
@@ -282,11 +279,14 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
         let decision: { should_send: boolean; message?: string | null; reasoning: string; suggested_stage?: string | null; context_summary?: string; pending_actions?: string; key_dates?: string };
 
         try {
-          const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
-          if (toolCall?.function?.arguments) {
-            decision = JSON.parse(toolCall.function.arguments);
+          // Anthropic tool_use response format
+          const toolUseBlock = aiData.content?.find((b: any) => b.type === "tool_use");
+          if (toolUseBlock?.input) {
+            decision = toolUseBlock.input;
           } else {
-            const content = aiData.choices?.[0]?.message?.content || "";
+            // Fallback: try to extract JSON from text content
+            const textBlock = aiData.content?.find((b: any) => b.type === "text");
+            const content = textBlock?.text || "";
             const jsonMatch = content.match(/\{[\s\S]*\}/);
             if (jsonMatch) {
               decision = JSON.parse(jsonMatch[0]);
