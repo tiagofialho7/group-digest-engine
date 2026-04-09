@@ -47,7 +47,28 @@ serve(async (req) => {
       if (vaultKey) apiKey = vaultKey;
     }
 
-    // 2. Get master instance
+    // 1b. Fetch Anthropic API key
+    const { data: anthropicKeyData } = await supabaseAdmin
+      .from("org_api_keys")
+      .select("api_key")
+      .eq("org_id", orgId)
+      .eq("provider", "anthropic")
+      .single();
+
+    let anthropicKey = anthropicKeyData?.api_key || "";
+    if (anthropicKey === "***vault***") {
+      const { data: vaultKey } = await supabaseAdmin.rpc("get_vault_secret", {
+        p_name: `anthropic_key_${orgId}`,
+      });
+      if (vaultKey) anthropicKey = vaultKey;
+    }
+
+    if (!anthropicKey) {
+      return new Response(JSON.stringify({ error: "Anthropic API key not configured" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const { data: instance } = await supabaseAdmin
       .from("whatsapp_instances")
       .select("instance_name, phone_number")
