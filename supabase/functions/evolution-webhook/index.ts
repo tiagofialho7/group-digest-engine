@@ -23,12 +23,17 @@ serve(async (req) => {
     const event = body.event || body.action || 'unknown';
     console.log(`[evolution-webhook] Event: ${event}`);
 
-    // Store raw webhook payload for debugging
+    // Store raw webhook payload for debugging (scrub sensitive fields)
+    const sanitizedBody = JSON.parse(JSON.stringify(body));
+    if (sanitizedBody.apikey) sanitizedBody.apikey = '***REDACTED***';
+    if (sanitizedBody.data?.apikey) sanitizedBody.data.apikey = '***REDACTED***';
+    if (sanitizedBody.server_url) sanitizedBody.server_url = '***REDACTED***';
+    
     const { error: logError } = await supabase
       .from('webhook_logs')
       .insert({
         event_type: event,
-        payload: body,
+        payload: sanitizedBody,
         instance_name: body.instance || body.instanceName || null,
       });
 
