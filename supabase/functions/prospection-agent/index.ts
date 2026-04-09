@@ -92,12 +92,22 @@ serve(async (req) => {
       await supabaseAdmin.from("agent_execution_logs").insert({
         org_id: orgId, groups_checked: 0, messages_sent: 0, status: "success",
       });
-      return new Response(JSON.stringify({ groups_checked: 0, messages_sent: 0 }), {
+      return new Response(JSON.stringify({ groups_checked: 0, messages_sent: 0, stage_updates: 0 }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     let totalMessagesSent = 0;
+    let stageUpdates = 0;
+    let lastDecisionDebug: {
+      group_id: string;
+      group_name: string;
+      reasoning: string;
+      suggested_stage: string | null;
+      current_stage: string;
+      stage_updated: boolean;
+      should_send: boolean;
+    } | null = null;
     const errors: string[] = [];
 
     for (const group of groups) {
@@ -248,37 +258,71 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
         }
 
         const aiData = await aiRes.json();
+        console.log("RAW AI RESPONSE:", JSON.stringify(aiData));
+
         let decision: { should_send: boolean; message?: string | null; reasoning: string; suggested_stage?: string | null; context_summary?: string; pending_actions?: string; key_dates?: string };
 
-        const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
-        if (toolCall?.function?.arguments) {
-          decision = JSON.parse(toolCall.function.arguments);
-        } else {
-          const content = aiData.choices?.[0]?.message?.content || "";
-          const jsonMatch = content.match(/\{[\s\S]*\}/);
-          if (jsonMatch) {
-            decision = JSON.parse(jsonMatch[0]);
+        try {
+          const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
+          if (toolCall?.function?.arguments) {
+            decision = JSON.parse(toolCall.function.arguments);
           } else {
-            console.log(`No decision for ${group.group_name}: ${content}`);
-            continue;
+            const content = aiData.choices?.[0]?.message?.content || "";
+            const jsonMatch = content.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+              decision = JSON.parse(jsonMatch[0]);
+            } else {
+              console.log(`No decision for ${group.group_name}: ${content}`);
+              errors.push(`No parsable decision for ${group.group_name}`);
+              continue;
+            }
+          }
+        } catch (parseError) {
+          console.error(`Decision parse error for ${group.group_name}:`, parseError);
+          errors.push(`Decision parse failed for ${group.group_name}: ${parseError instanceof Error ? parseError.message : "unknown"}`);
+          continue;
+        }
+
+        console.log("PARSED DECISION:", JSON.stringify(decision));
+        console.log("SUGGESTED STAGE:", decision.suggested_stage);
+        console.log("CURRENT STAGE:", group.current_stage);
+        console.log("STAGE COMPARISON:", decision.suggested_stage === group.current_stage ? "equal" : "different");
+        console.log(`Group ${group.group_name}: should_send=${decision.should_send}, reasoning=${decision.reasoning}, suggested_stage=${decision.suggested_stage || "none"}`);
+
+        // 10. Save/update context memory
+        if (decision.context_summary || decision.pending_actions || decision.key_dates) {
+          const contextData = {
+            org_id: orgId,
+            prospection_group_id: group.id,
+            context_summary: decision.context_summary || "",
+            pending_actions: decision.pending_actions || "",
+            key_dates: decision.key_dates || "",
+            last_stage_detected: group.current_stage,
+            last_analyzed_at: new Date().toISOString(),
+          };
+
+          if (savedContext) {
+            await supabaseAdmin
+              .from("prospection_context")
+              .update(contextData)
+              .eq("id", savedContext.id);
+          } else {
+            await supabaseAdmin
+              .from("prospection_context")
+              .insert(contextData);
           }
         }
 
-        console.log(`Group ${group.group_name}: should_send=${decision.should_send}, reasoning=${decision.reasoning}, suggested_stage=${decision.suggested_stage || "none"}`);
-
-        // Debug log for stage advancement
-        console.log(`[STAGE DEBUG] Group: ${group.group_name} | suggested_stage: ${decision.suggested_stage || "null"} | current_stage: ${group.current_stage} | different: ${decision.suggested_stage && decision.suggested_stage !== group.current_stage}`);
-
-        // Handle automatic stage advancement with explicit error handling
+        let stageUpdated = false;
         const validStages = ["pre_qualification", "contact_made", "visit_done", "project_elaborated", "project_presented", "deal_won", "deal_lost"];
         if (decision.suggested_stage && validStages.includes(decision.suggested_stage) && decision.suggested_stage !== group.current_stage) {
           console.log(`[STAGE] Advancing ${group.group_name}: ${group.current_stage} → ${decision.suggested_stage}`);
-          
+
           const { error: stageError } = await supabaseAdmin
             .from("prospection_groups")
-            .update({ 
+            .update({
               current_stage: decision.suggested_stage,
-              updated_at: new Date().toISOString()
+              updated_at: new Date().toISOString(),
             })
             .eq("id", group.id);
 
@@ -287,7 +331,7 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
             errors.push(`Stage update failed for ${group.group_name}: ${stageError.message}`);
           } else {
             console.log(`[STAGE OK] Stage updated: ${group.group_name} → ${decision.suggested_stage}`);
-            
+
             const { error: historyError } = await supabaseAdmin
               .from("prospection_stage_history")
               .insert({
@@ -301,9 +345,22 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
             if (historyError) {
               console.error(`[STAGE HISTORY ERROR] Failed to insert history for ${group.group_name}:`, historyError);
               errors.push(`Stage history insert failed for ${group.group_name}: ${historyError.message}`);
+            } else {
+              stageUpdated = true;
+              stageUpdates++;
             }
           }
         }
+
+        lastDecisionDebug = {
+          group_id: group.id,
+          group_name: group.group_name,
+          reasoning: decision.reasoning,
+          suggested_stage: decision.suggested_stage || null,
+          current_stage: group.current_stage,
+          stage_updated: stageUpdated,
+          should_send: decision.should_send,
+        };
 
         if (decision.should_send && decision.message) {
           const sendRes = await fetch(
@@ -396,6 +453,8 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
     return new Response(JSON.stringify({
       groups_checked: groups.length,
       messages_sent: totalMessagesSent,
+      stage_updates: stageUpdates,
+      last_decision: lastDecisionDebug || undefined,
       errors: errors.length > 0 ? errors : undefined,
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

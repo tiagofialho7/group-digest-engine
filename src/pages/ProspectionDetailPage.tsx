@@ -50,6 +50,22 @@ interface AgentContext {
   last_analyzed_at: string | null;
 }
 
+interface AgentExecutionResponse {
+  groups_checked: number;
+  messages_sent: number;
+  stage_updates?: number;
+  errors?: string[];
+  last_decision?: {
+    group_id: string;
+    group_name: string;
+    reasoning: string;
+    suggested_stage: string | null;
+    current_stage: string;
+    stage_updated: boolean;
+    should_send: boolean;
+  };
+}
+
 interface WhatsAppMessage {
   key: { id: string; fromMe: boolean; participant?: string };
   message: { conversation?: string; extendedTextMessage?: { text?: string } };
@@ -76,6 +92,7 @@ export default function ProspectionDetailPage() {
   const [runningAgent, setRunningAgent] = useState(false);
   const [instanceName, setInstanceName] = useState<string | null>(null);
   const [agentContext, setAgentContext] = useState<AgentContext | null>(null);
+  const [lastExecution, setLastExecution] = useState<AgentExecutionResponse | null>(null);
 
   // Fetch master instance
   useEffect(() => {
@@ -209,23 +226,26 @@ export default function ProspectionDetailPage() {
         body: { orgId: org.id, groupId: group.id },
       });
       if (error) throw error;
-      const sent = data?.messages_sent ?? 0;
-      toast.success(`Agente executado — ${sent} mensagem(ns) enviada(s)`);
-      // Reload agent messages
-      const { data: msgs } = await supabase
-        .from("agent_messages")
-        .select("*")
-        .eq("prospection_group_id", group.id)
-        .order("sent_at", { ascending: false })
-        .limit(20);
-      if (msgs) setAgentMessages(msgs as AgentMessage[]);
-      // Refresh context
-      const { data: ctx } = await supabase
-        .from("prospection_context")
-        .select("context_summary, pending_actions, key_dates, last_analyzed_at")
-        .eq("prospection_group_id", group.id)
-        .single();
-      if (ctx) setAgentContext(ctx as AgentContext);
+
+      const result = (data || {}) as AgentExecutionResponse;
+      setLastExecution(result);
+
+      const hasStageUpdate = (result.stage_updates ?? 0) > 0 || Boolean(result.last_decision?.stage_updated);
+      const descriptionParts = [
+        `groups_checked: ${result.groups_checked ?? 0}`,
+        `messages_sent: ${result.messages_sent ?? 0}`,
+        `stage_updated: ${hasStageUpdate ? "sim" : "não"}`,
+      ];
+
+      if (result.errors?.length) {
+        descriptionParts.push(`errors: ${result.errors.join(" | ")}`);
+      }
+
+      toast("Execução do agente concluída", {
+        description: descriptionParts.join(" • "),
+      });
+
+      await fetchData();
     } catch (e: any) {
       toast.error("Erro ao executar agente: " + (e.message || "Erro desconhecido"));
     } finally {
@@ -406,6 +426,74 @@ export default function ProspectionDetailPage() {
         )}
 
 
+
+        <div className="rounded-lg border border-border bg-card p-4 md:col-span-2">
+          <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+            <Bot className="h-3.5 w-3.5 text-primary" />
+            Log do Agente
+          </h3>
+
+          {!lastExecution ? (
+            <p className="text-xs text-muted-foreground">
+              Execute o agente para ver o reasoning, suggested_stage e o retorno completo desta sessão.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="rounded-lg bg-muted/50 px-3 py-2">
+                  <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Grupos</p>
+                  <p className="text-sm text-foreground">{lastExecution.groups_checked ?? 0}</p>
+                </div>
+                <div className="rounded-lg bg-muted/50 px-3 py-2">
+                  <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Mensagens</p>
+                  <p className="text-sm text-foreground">{lastExecution.messages_sent ?? 0}</p>
+                </div>
+                <div className="rounded-lg bg-muted/50 px-3 py-2">
+                  <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Fase atualizada</p>
+                  <p className="text-sm text-foreground">{((lastExecution.stage_updates ?? 0) > 0 || lastExecution.last_decision?.stage_updated) ? "Sim" : "Não"}</p>
+                </div>
+                <div className="rounded-lg bg-muted/50 px-3 py-2">
+                  <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Should send</p>
+                  <p className="text-sm text-foreground">{lastExecution.last_decision?.should_send ? "Sim" : "Não"}</p>
+                </div>
+              </div>
+
+              {lastExecution.last_decision && (
+                <div className="space-y-2.5 rounded-lg border border-border/60 p-3">
+                  <div>
+                    <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground mb-0.5">Grupo</p>
+                    <p className="text-xs text-foreground">{lastExecution.last_decision.group_name}</p>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <div>
+                      <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground mb-0.5">Current stage</p>
+                      <p className="text-xs text-foreground">{lastExecution.last_decision.current_stage}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground mb-0.5">Suggested stage</p>
+                      <p className="text-xs text-foreground">{lastExecution.last_decision.suggested_stage || "—"}</p>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground mb-0.5">Reasoning</p>
+                    <p className="text-xs text-foreground">{lastExecution.last_decision.reasoning}</p>
+                  </div>
+                </div>
+              )}
+
+              {lastExecution.errors && lastExecution.errors.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground mb-1">Erros</p>
+                  <div className="space-y-1">
+                    {lastExecution.errors.map((error, index) => (
+                      <p key={`${error}-${index}`} className="text-xs text-destructive">• {error}</p>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Timeline - Stage History */}
         <div className="rounded-lg border border-border bg-card p-4">
