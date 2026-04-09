@@ -34,13 +34,11 @@ interface GroupResult {
   decision?: any;
 }
 
-async function checkTiagoIntervention(
+function checkTiagoIntervention(
   whatsappMessages: any[],
-): { tiagoSent: boolean; tiagoTime: string | null; consultantRespondedAfter: boolean } {
+): { tiagoSent: boolean; tiagoTime: string | null } {
   let tiagoSent = false;
   let tiagoTime: string | null = null;
-  let consultantRespondedAfter = false;
-  let tiagoTimestamp = 0;
 
   for (const m of whatsappMessages) {
     const senderPhone = m.key?.participant || m.participant || "";
@@ -50,19 +48,11 @@ async function checkTiagoIntervention(
 
     if (is24hAgo && TIAGO_PHONE_NUMBERS.some(t => cleanPhone.includes(t.replace(/[\+\-\s]/g, "")))) {
       tiagoSent = true;
-      tiagoTimestamp = msgTimestamp;
       tiagoTime = new Date(msgTimestamp).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo" });
-    }
-
-    // Check if any non-Tiago message came after Tiago's last message
-    if (tiagoTimestamp && msgTimestamp > tiagoTimestamp && !TIAGO_PHONE_NUMBERS.some(t => cleanPhone.includes(t.replace(/[\+\-\s]/g, "")))) {
-      if (!m.key?.fromMe && cleanPhone) {
-        consultantRespondedAfter = true;
-      }
     }
   }
 
-  return { tiagoSent, tiagoTime, consultantRespondedAfter };
+  return { tiagoSent, tiagoTime };
 }
 
 async function processGroup(
@@ -288,9 +278,9 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
     const rawStage = decision.suggested_stage;
     const suggestedStage = (rawStage && rawStage !== "none" && rawStage !== "null" && String(rawStage).trim() !== "") ? String(rawStage).trim() : null;
 
-    // Override should_send if Tiago humano already handled it
-    if (tiagoCheck.tiagoSent && tiagoCheck.consultantRespondedAfter && decision.should_send) {
-      console.log(`[TIAGO OVERRIDE] ${group.group_name}: Tiago cobrou e consultores responderam — forçando should_send=false`);
+    // REGRA ABSOLUTA: Se Tiago humano enviou mensagem nas últimas 24h → should_send = false, sem exceção
+    if (tiagoCheck.tiagoSent && decision.should_send) {
+      console.log(`[TIAGO OVERRIDE] ${group.group_name}: Tiago humano enviou às ${tiagoCheck.tiagoTime} (últimas 24h) — forçando should_send=false`);
       decision.should_send = false;
       decision.reasoning = (decision.reasoning || "") + " [OVERRIDE: Tiago humano já cobrou e houve resposta]";
     }
