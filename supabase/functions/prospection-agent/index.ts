@@ -266,42 +266,43 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
 
         console.log(`Group ${group.group_name}: should_send=${decision.should_send}, reasoning=${decision.reasoning}, suggested_stage=${decision.suggested_stage || "none"}`);
 
-        // 10. Save/update context memory
-        if (decision.context_summary || decision.pending_actions || decision.key_dates) {
-          const contextData = {
-            org_id: orgId,
-            prospection_group_id: group.id,
-            context_summary: decision.context_summary || "",
-            pending_actions: decision.pending_actions || "",
-            key_dates: decision.key_dates || "",
-            last_stage_detected: group.current_stage,
-            last_analyzed_at: new Date().toISOString(),
-          };
+        // Debug log for stage advancement
+        console.log(`[STAGE DEBUG] Group: ${group.group_name} | suggested_stage: ${decision.suggested_stage || "null"} | current_stage: ${group.current_stage} | different: ${decision.suggested_stage && decision.suggested_stage !== group.current_stage}`);
 
-          if (savedContext) {
-            await supabaseAdmin
-              .from("prospection_context")
-              .update(contextData)
-              .eq("id", savedContext.id);
-          } else {
-            await supabaseAdmin
-              .from("prospection_context")
-              .insert(contextData);
-          }
-        }
-
-        // Handle automatic stage advancement
+        // Handle automatic stage advancement with explicit error handling
         const validStages = ["pre_qualification", "contact_made", "visit_done", "project_elaborated", "project_presented", "deal_won", "deal_lost"];
         if (decision.suggested_stage && validStages.includes(decision.suggested_stage) && decision.suggested_stage !== group.current_stage) {
-          console.log(`Group ${group.group_name}: advancing stage from ${group.current_stage} to ${decision.suggested_stage}`);
-          await supabaseAdmin.from("prospection_groups").update({ current_stage: decision.suggested_stage }).eq("id", group.id);
-          await supabaseAdmin.from("prospection_stage_history").insert({
-            prospection_group_id: group.id,
-            from_stage: group.current_stage,
-            to_stage: decision.suggested_stage,
-            changed_by: "agent",
-            reason: decision.reasoning,
-          });
+          console.log(`[STAGE] Advancing ${group.group_name}: ${group.current_stage} → ${decision.suggested_stage}`);
+          
+          const { error: stageError } = await supabaseAdmin
+            .from("prospection_groups")
+            .update({ 
+              current_stage: decision.suggested_stage,
+              updated_at: new Date().toISOString()
+            })
+            .eq("id", group.id);
+
+          if (stageError) {
+            console.error(`[STAGE ERROR] Failed to update stage for ${group.group_name}:`, stageError);
+            errors.push(`Stage update failed for ${group.group_name}: ${stageError.message}`);
+          } else {
+            console.log(`[STAGE OK] Stage updated: ${group.group_name} → ${decision.suggested_stage}`);
+            
+            const { error: historyError } = await supabaseAdmin
+              .from("prospection_stage_history")
+              .insert({
+                prospection_group_id: group.id,
+                from_stage: group.current_stage,
+                to_stage: decision.suggested_stage,
+                changed_by: "agent",
+                reason: decision.reasoning,
+              });
+
+            if (historyError) {
+              console.error(`[STAGE HISTORY ERROR] Failed to insert history for ${group.group_name}:`, historyError);
+              errors.push(`Stage history insert failed for ${group.group_name}: ${historyError.message}`);
+            }
+          }
         }
 
         if (decision.should_send && decision.message) {
