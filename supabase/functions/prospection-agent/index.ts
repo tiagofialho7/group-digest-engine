@@ -362,7 +362,7 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
           group_id: group.id,
           group_name: group.group_name,
           reasoning: decision.reasoning,
-          suggested_stage: decision.suggested_stage || null,
+          suggested_stage: suggestedStage,
           current_stage: group.current_stage,
           stage_updated: stageUpdated,
           should_send: decision.should_send,
