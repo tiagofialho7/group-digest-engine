@@ -14,6 +14,59 @@ export type Database = {
   }
   public: {
     Tables: {
+      agent_batch_reports: {
+        Row: {
+          action: string
+          batch_number: number
+          created_at: string
+          execution_id: string
+          group_name: string
+          id: string
+          message_sent: string | null
+          org_id: string
+          processed_at: string
+          reasoning: string | null
+          stage_after: string | null
+          stage_before: string | null
+        }
+        Insert: {
+          action?: string
+          batch_number?: number
+          created_at?: string
+          execution_id: string
+          group_name: string
+          id?: string
+          message_sent?: string | null
+          org_id: string
+          processed_at?: string
+          reasoning?: string | null
+          stage_after?: string | null
+          stage_before?: string | null
+        }
+        Update: {
+          action?: string
+          batch_number?: number
+          created_at?: string
+          execution_id?: string
+          group_name?: string
+          id?: string
+          message_sent?: string | null
+          org_id?: string
+          processed_at?: string
+          reasoning?: string | null
+          stage_after?: string | null
+          stage_before?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_batch_reports_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       agent_execution_logs: {
         Row: {
           created_at: string
