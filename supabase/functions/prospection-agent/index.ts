@@ -155,6 +155,9 @@ PROSPECTO: ${group.prospect_name || "N/A"}
 FASE ATUAL: ${stageMap[group.current_stage] || group.current_stage}
 PRIORIDADE: ${group.priority === "high" ? "URGENTE" : "Normal"}
 ${notesSection}
+${typeSummary}
+IMPORTANTE: Se não há "áudio" na lista de tipos acima, NÃO mencione áudios na sua resposta. Só referencie áudios se o tipo "áudio" aparecer explicitamente na lista.
+
 ${memorySection}
 ${messagesContext || "(sem mensagens recentes)"}
 
