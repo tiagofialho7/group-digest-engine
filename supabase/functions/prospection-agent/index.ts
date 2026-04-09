@@ -7,6 +7,7 @@ const corsHeaders = {
 };
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
+const AI_MODEL = "claude-haiku-4-5-20251001";
 const BATCH_SIZE = 5;
 
 const stageMap: Record<string, string> = {
