@@ -591,17 +591,18 @@ serve(async (req) => {
     });
     await supabaseAdmin.from("agent_schedule_config").update({ updated_at: executionTimestamp }).eq("org_id", orgId);
 
-    // Check if there are more groups — if so, invoke self for next batch
+    // Check if there are more groups — if so, invoke self for next batch (fire-and-forget)
     const hasMore = groups.length === effectiveBatchSize;
     let nextBatchTriggered = false;
 
     if (hasMore && !groupId) {
-      console.log(`[AGENT] Batch ${currentBatchNumber} done. Triggering batch ${currentBatchNumber + 1}...`);
+      console.log(`[AGENT] Batch ${currentBatchNumber} done. Triggering batch ${currentBatchNumber + 1} (fire-and-forget)...`);
       try {
         const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
         const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
         
-        const nextRes = await fetch(`${supabaseUrl}/functions/v1/prospection-agent`, {
+        // Fire-and-forget: don't await the response, just ensure the request is sent
+        const fetchPromise = fetch(`${supabaseUrl}/functions/v1/prospection-agent`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -615,10 +616,12 @@ serve(async (req) => {
             batch_number: currentBatchNumber + 1,
           }),
         });
-        nextBatchTriggered = nextRes.ok;
-        if (!nextRes.ok) {
-          console.error(`[AGENT] Failed to trigger batch ${currentBatchNumber + 1}: ${nextRes.status}`);
-        }
+        
+        // Wait just enough to ensure the request is dispatched, not for the full response
+        const timeoutPromise = new Promise(resolve => setTimeout(resolve, 2000));
+        await Promise.race([fetchPromise.then(() => { nextBatchTriggered = true; }), timeoutPromise.then(() => { nextBatchTriggered = true; })]);
+        
+        console.log(`[AGENT] Next batch request dispatched successfully`);
       } catch (chainErr) {
         console.error(`[AGENT] Error chaining batch ${currentBatchNumber + 1}:`, chainErr);
       }
