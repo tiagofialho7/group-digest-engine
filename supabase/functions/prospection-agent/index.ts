@@ -10,7 +10,7 @@ const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 const AI_MODEL = "claude-haiku-4-5-20251001";
 const DEFAULT_BATCH_SIZE = 5;
 const DELAY_BETWEEN_GROUPS_MS = 500;
-const RETRY_DELAY_MS = 10000;
+const RETRY_DELAY_MS = 15000;
 const TIAGO_PHONE_NUMBERS = ["5585815536698", "558581553698", "+5585815536698", "+558581553698"];
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -68,12 +68,27 @@ async function processGroup(
   const result: GroupResult = { messagesSent: 0, stageUpdated: false };
 
   try {
-    console.log(`[${group.group_name}] MODELO EM USO: ${AI_MODEL} (Anthropic Claude)`);
-
     if (group.current_stage === "deal_won" || group.current_stage === "deal_lost") {
       console.log(`Group ${group.group_name}: skipped — deal finalized (${group.current_stage})`);
       return result;
     }
+
+    // === REGRA 24H NO CÓDIGO: verificar se agente já enviou mensagem nas últimas 24h ===
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { data: recentAgentMsgs } = await supabaseAdmin
+      .from("agent_messages")
+      .select("id, sent_at")
+      .eq("prospection_group_id", group.id)
+      .gte("sent_at", twentyFourHoursAgo)
+      .limit(1);
+
+    if (recentAgentMsgs && recentAgentMsgs.length > 0) {
+      console.log(`[24H SKIP] ${group.group_name}: agente já enviou mensagem nas últimas 24h (${recentAgentMsgs[0].sent_at}) — pulando sem chamar IA`);
+      result.decision = { should_send: false, reasoning: "Cobrança do agente < 24h" };
+      return result;
+    }
+
+    console.log(`[${group.group_name}] MODELO EM USO: ${AI_MODEL} (Anthropic Claude)`);
 
     // Fetch saved context
     const { data: savedContext } = await supabaseAdmin
@@ -151,13 +166,14 @@ async function processGroup(
 
     const typeSummary = `TIPOS DE MENSAGEM PRESENTES: [${messageTypes.join(", ")}]`;
 
-    // Check Tiago humano intervention
+    // Check Tiago humano intervention — skip AI call entirely if Tiago sent in last 24h
     const tiagoCheck = checkTiagoIntervention(whatsappMessages);
-    let tiagoSection = "";
     if (tiagoCheck.tiagoSent) {
-      tiagoSection = `\nREGRA ABSOLUTA — TIAGO HUMANO: Tiago humano enviou mensagem às ${tiagoCheck.tiagoTime} (últimas 24h). O agente NÃO PODE enviar mensagem neste grupo. should_send DEVE ser false. Período de 24h é inegociável.`;
-      console.log(`[TIAGO CHECK] ${group.group_name}: tiagoSent=true às ${tiagoCheck.tiagoTime} — bloqueando envio`);
+      console.log(`[24H SKIP] ${group.group_name}: Tiago humano enviou às ${tiagoCheck.tiagoTime} (últimas 24h) — pulando sem chamar IA`);
+      result.decision = { should_send: false, reasoning: `Tiago humano cobrou às ${tiagoCheck.tiagoTime} (< 24h)` };
+      return result;
     }
+    let tiagoSection = "";
 
     const agentHistory = (prevAgentMsgs || []).map((m: any) =>
       `[${new Date(m.sent_at).toLocaleString("pt-BR")}] Agente (${m.message_type}): ${m.message_text}`
@@ -197,6 +213,13 @@ ${agentHistory || "(nenhuma cobrança anterior)"}
 DATA/HORA ATUAL: ${new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}
 
 Baseado no contexto acima, você deve enviar alguma mensagem agora? Se sim, qual?
+
+INFERÊNCIA CONTEXTUAL DE FASE (use para suggested_stage):
+- "Já foi apresentado" / "apresentei há tempos" / "já apresentamos" → suggested_stage: "project_presented"
+- "Fiz visita" + "tá andando" sem mencionar proposta pronta → suggested_stage: "visit_done"
+- "Proposta pronta" / "elaborei a proposta" / "proposta enviada" → suggested_stage: "project_elaborated"
+- "Agendei reunião" / "marquei visita" / "vou visitar" → suggested_stage: "contact_made"
+
 Responda APENAS em JSON válido: { "should_send": boolean, "message": string | null, "reasoning": string, "context_summary": string, "pending_actions": string, "key_dates": string }`;
 
     // Call Anthropic Claude with retry on 429
