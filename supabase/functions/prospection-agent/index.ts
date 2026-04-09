@@ -54,7 +54,7 @@ async function processGroup(
       .single();
 
     const hasContext = savedContext && savedContext.context_summary;
-    const messageLimit = hasContext ? 10 : 30;
+    const messageLimit = hasContext ? 30 : 30;
 
     // Fetch WhatsApp messages
     let whatsappMessages: any[] = [];
