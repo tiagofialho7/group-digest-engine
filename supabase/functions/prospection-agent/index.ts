@@ -213,6 +213,13 @@ ${agentHistory || "(nenhuma cobrança anterior)"}
 DATA/HORA ATUAL: ${new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}
 
 Baseado no contexto acima, você deve enviar alguma mensagem agora? Se sim, qual?
+
+INFERÊNCIA CONTEXTUAL DE FASE (use para suggested_stage):
+- "Já foi apresentado" / "apresentei há tempos" / "já apresentamos" → suggested_stage: "project_presented"
+- "Fiz visita" + "tá andando" sem mencionar proposta pronta → suggested_stage: "visit_done"
+- "Proposta pronta" / "elaborei a proposta" / "proposta enviada" → suggested_stage: "project_elaborated"
+- "Agendei reunião" / "marquei visita" / "vou visitar" → suggested_stage: "contact_made"
+
 Responda APENAS em JSON válido: { "should_send": boolean, "message": string | null, "reasoning": string, "context_summary": string, "pending_actions": string, "key_dates": string }`;
 
     // Call Anthropic Claude with retry on 429
