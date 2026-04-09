@@ -559,13 +559,21 @@ serve(async (req) => {
       }
     }
 
+    const executionTimestamp = new Date().toISOString();
     await supabaseAdmin.from("agent_execution_logs").insert({
       org_id: orgId,
       groups_checked: groups.length,
       messages_sent: totalMessagesSent,
       status: errors.length > 0 ? "partial_error" : "success",
       error_log: errors.length > 0 ? errors.join("; ") : null,
+      executed_at: executionTimestamp,
     });
+
+    // Update schedule config with last execution time
+    await supabaseAdmin
+      .from("agent_schedule_config")
+      .update({ updated_at: executionTimestamp })
+      .eq("org_id", orgId);
 
     const hasMore = groups.length === effectiveLimit;
 
