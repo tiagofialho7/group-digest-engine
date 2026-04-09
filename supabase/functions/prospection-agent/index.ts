@@ -6,14 +6,12 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const AI_GATEWAY = "https://ai.gateway.lovable.dev/v1/chat/completions";
+const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
