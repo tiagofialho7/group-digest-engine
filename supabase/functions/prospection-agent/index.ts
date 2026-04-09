@@ -95,13 +95,39 @@ async function processGroup(
       .order("sent_at", { ascending: false })
       .limit(5);
 
-    // Build context
+    // Build context — detect message types explicitly
+    const messageTypes: string[] = [];
     const messagesContext = whatsappMessages.map((m: any) => {
+      const msgType = m.messageType || Object.keys(m.message || {}).find(k => k !== "messageContextInfo") || "unknown";
+      const isAudio = msgType === "audioMessage" || msgType === "pttMessage" || 
+        (m.message?.audioMessage != null) || (m.message?.pttMessage != null) ||
+        (m.message?.audioMessage?.mimetype || m.message?.pttMessage?.mimetype || "").includes("audio/");
+      const isImage = msgType === "imageMessage" || m.message?.imageMessage != null;
+      const isVideo = msgType === "videoMessage" || m.message?.videoMessage != null;
+      const isDocument = msgType === "documentMessage" || m.message?.documentMessage != null;
+      const isSticker = msgType === "stickerMessage" || m.message?.stickerMessage != null;
+
+      let typeLabel = "texto";
+      if (isAudio) typeLabel = "áudio";
+      else if (isImage) typeLabel = "imagem";
+      else if (isVideo) typeLabel = "vídeo";
+      else if (isDocument) typeLabel = "documento";
+      else if (isSticker) typeLabel = "figurinha";
+      messageTypes.push(typeLabel);
+
       const text = m.message?.conversation || m.message?.extendedTextMessage?.text || "";
       const sender = m.pushName || (m.key?.fromMe ? "Agente" : "Participante");
       const time = m.messageTimestamp ? new Date(m.messageTimestamp * 1000).toLocaleString("pt-BR") : "";
+      
+      if (isAudio) return `[${time}] ${sender}: [ÁUDIO - não transcrito]`;
+      if (isImage) return `[${time}] ${sender}: [IMAGEM]${text ? " " + text : ""}`;
+      if (isVideo) return `[${time}] ${sender}: [VÍDEO]${text ? " " + text : ""}`;
+      if (isDocument) return `[${time}] ${sender}: [DOCUMENTO]`;
+      if (isSticker) return `[${time}] ${sender}: [FIGURINHA]`;
       return `[${time}] ${sender}: ${text}`;
     }).filter((t: string) => t.includes(": ") && t.split(": ")[1].trim()).join("\n");
+
+    const typeSummary = `TIPOS DE MENSAGEM PRESENTES: [${messageTypes.join(", ")}]`;
 
     const agentHistory = (prevAgentMsgs || []).map((m: any) =>
       `[${new Date(m.sent_at).toLocaleString("pt-BR")}] Agente (${m.message_type}): ${m.message_text}`
