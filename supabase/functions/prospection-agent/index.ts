@@ -284,10 +284,16 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
         }
 
         console.log("PARSED DECISION:", JSON.stringify(decision));
-        console.log("SUGGESTED STAGE:", decision.suggested_stage);
+
+        // Normalize suggested_stage: treat empty string, "none", "null", undefined as null
+        const rawStage = decision.suggested_stage;
+        const suggestedStage = (rawStage && rawStage !== "none" && rawStage !== "null" && rawStage.trim() !== "") ? rawStage.trim() : null;
+
+        console.log("RAW SUGGESTED STAGE:", JSON.stringify(rawStage));
+        console.log("NORMALIZED SUGGESTED STAGE:", suggestedStage);
         console.log("CURRENT STAGE:", group.current_stage);
-        console.log("STAGE COMPARISON:", decision.suggested_stage === group.current_stage ? "equal" : "different");
-        console.log(`Group ${group.group_name}: should_send=${decision.should_send}, reasoning=${decision.reasoning}, suggested_stage=${decision.suggested_stage || "none"}`);
+        console.log("STAGE COMPARISON:", suggestedStage === group.current_stage ? "equal" : (suggestedStage ? "different" : "no suggestion"));
+        console.log(`Group ${group.group_name}: should_send=${decision.should_send}, reasoning=${decision.reasoning}, suggested_stage=${suggestedStage || "none"}`);
 
         // 10. Save/update context memory
         if (decision.context_summary || decision.pending_actions || decision.key_dates) {
