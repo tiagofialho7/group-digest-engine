@@ -41,7 +41,8 @@ async function processGroup(
 ): Promise<GroupResult> {
   const result: GroupResult = { messagesSent: 0, stageUpdated: false };
 
-  try {
+    console.log(`[${group.group_name}] MODELO EM USO: ${AI_MODEL} (Anthropic Claude)`);
+
     if (group.current_stage === "deal_won" || group.current_stage === "deal_lost") {
       console.log(`Group ${group.group_name}: skipped — deal finalized (${group.current_stage})`);
       return result;
