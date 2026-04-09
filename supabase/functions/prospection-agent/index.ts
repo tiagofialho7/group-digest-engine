@@ -144,7 +144,7 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
+        model: AI_MODEL,
         max_tokens: 1000,
         system: agentInstructions,
         messages: [{ role: "user", content: userPrompt }],
