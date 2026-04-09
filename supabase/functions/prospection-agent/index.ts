@@ -510,11 +510,8 @@ serve(async (req) => {
 
     if (groupId) {
       groupsQuery = groupsQuery.eq("id", groupId);
-    } else if (isFirstBatch) {
-      // Only apply 3h filter on fresh executions, not on continuation batches
-      const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
-      groupsQuery = groupsQuery.or(`last_agent_check_at.is.null,last_agent_check_at.lt.${threeHoursAgo}`);
     }
+    // No 3h filter — the scheduler already controls execution frequency (3x/day)
 
     groupsQuery = groupsQuery.range(effectiveOffset, effectiveOffset + effectiveBatchSize - 1);
     const { data: groups, error: groupsError } = await groupsQuery;
