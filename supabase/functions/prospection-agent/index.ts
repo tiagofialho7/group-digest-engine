@@ -321,13 +321,13 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
 
         let stageUpdated = false;
         const validStages = ["pre_qualification", "contact_made", "visit_done", "project_elaborated", "project_presented", "deal_won", "deal_lost"];
-        if (decision.suggested_stage && validStages.includes(decision.suggested_stage) && decision.suggested_stage !== group.current_stage) {
-          console.log(`[STAGE] Advancing ${group.group_name}: ${group.current_stage} → ${decision.suggested_stage}`);
+        if (suggestedStage && validStages.includes(suggestedStage) && suggestedStage !== group.current_stage) {
+          console.log(`[STAGE] Advancing ${group.group_name}: ${group.current_stage} → ${suggestedStage}`);
 
           const { error: stageError } = await supabaseAdmin
             .from("prospection_groups")
             .update({
-              current_stage: decision.suggested_stage,
+              current_stage: suggestedStage,
               updated_at: new Date().toISOString(),
             })
             .eq("id", group.id);
@@ -336,7 +336,7 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
             console.error(`[STAGE ERROR] Failed to update stage for ${group.group_name}:`, stageError);
             errors.push(`Stage update failed for ${group.group_name}: ${stageError.message}`);
           } else {
-            console.log(`[STAGE OK] Stage updated: ${group.group_name} → ${decision.suggested_stage}`);
+            console.log(`[STAGE OK] Stage updated: ${group.group_name} → ${suggestedStage}`);
 
             const { error: historyError } = await supabaseAdmin
               .from("prospection_stage_history")
