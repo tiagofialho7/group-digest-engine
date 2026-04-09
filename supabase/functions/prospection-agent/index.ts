@@ -467,10 +467,6 @@ serve(async (req) => {
         results.push(r);
         await delay(DELAY_BETWEEN_GROUPS_MS);
       }
-      const _ = results; // keep reference for below loop
-      // Replace Promise.all results with sequential results
-      const resultsArr = results; void(resultsArr);
-      );
 
       for (const r of results) {
         totalMessagesSent += r.messagesSent;
