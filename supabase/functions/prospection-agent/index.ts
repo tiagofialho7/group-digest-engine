@@ -166,13 +166,14 @@ async function processGroup(
 
     const typeSummary = `TIPOS DE MENSAGEM PRESENTES: [${messageTypes.join(", ")}]`;
 
-    // Check Tiago humano intervention
+    // Check Tiago humano intervention — skip AI call entirely if Tiago sent in last 24h
     const tiagoCheck = checkTiagoIntervention(whatsappMessages);
-    let tiagoSection = "";
     if (tiagoCheck.tiagoSent) {
-      tiagoSection = `\nREGRA ABSOLUTA — TIAGO HUMANO: Tiago humano enviou mensagem às ${tiagoCheck.tiagoTime} (últimas 24h). O agente NÃO PODE enviar mensagem neste grupo. should_send DEVE ser false. Período de 24h é inegociável.`;
-      console.log(`[TIAGO CHECK] ${group.group_name}: tiagoSent=true às ${tiagoCheck.tiagoTime} — bloqueando envio`);
+      console.log(`[24H SKIP] ${group.group_name}: Tiago humano enviou às ${tiagoCheck.tiagoTime} (últimas 24h) — pulando sem chamar IA`);
+      result.decision = { should_send: false, reasoning: `Tiago humano cobrou às ${tiagoCheck.tiagoTime} (< 24h)` };
+      return result;
     }
+    let tiagoSection = "";
 
     const agentHistory = (prevAgentMsgs || []).map((m: any) =>
       `[${new Date(m.sent_at).toLocaleString("pt-BR")}] Agente (${m.message_type}): ${m.message_text}`
