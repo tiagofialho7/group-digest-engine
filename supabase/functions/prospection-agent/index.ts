@@ -343,7 +343,7 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
               .insert({
                 prospection_group_id: group.id,
                 from_stage: group.current_stage,
-                to_stage: decision.suggested_stage,
+                to_stage: suggestedStage,
                 changed_by: "agent",
                 reason: decision.reasoning,
               });
