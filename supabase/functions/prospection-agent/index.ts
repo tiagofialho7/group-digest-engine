@@ -96,7 +96,7 @@ serve(async (req) => {
     // 4. Fetch prospection groups
     let groupsQuery = supabaseAdmin
       .from("prospection_groups")
-      .select("id, group_name, current_stage, prospect_name, prospect_company, whatsapp_group_id, priority")
+      .select("id, group_name, current_stage, prospect_name, prospect_company, whatsapp_group_id, priority, notes")
       .eq("org_id", orgId)
       .eq("is_active", true)
       .not("current_stage", "in", "(deal_won,deal_lost)");
@@ -215,12 +215,16 @@ MENSAGENS NOVAS DESDE A ÚLTIMA ANÁLISE:`;
           memorySection = "ÚLTIMAS MENSAGENS DO GRUPO:";
         }
 
+        const notesSection = group.notes
+          ? `\nNOTAS DA PROSPECÇÃO (contexto importante — PRIORIDADE MÁXIMA na análise):\n${group.notes}\n`
+          : "";
+
         const userPrompt = `GRUPO: ${group.group_name}
 EMPRESA: ${group.prospect_company || "N/A"}
 PROSPECTO: ${group.prospect_name || "N/A"}
 FASE ATUAL: ${stageMap[group.current_stage] || group.current_stage}
 PRIORIDADE: ${group.priority === "high" ? "URGENTE" : "Normal"}
-
+${notesSection}
 ${memorySection}
 ${messagesContext || "(sem mensagens recentes)"}
 
@@ -340,6 +344,9 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
 
         let stageUpdated = false;
         const validStages = ["pre_qualification", "contact_made", "visit_done", "project_elaborated", "project_presented", "deal_won", "deal_lost"];
+        
+        console.log("[STAGE]", group.group_name, "current:", group.current_stage, "suggested:", suggestedStage);
+        
         if (suggestedStage && validStages.includes(suggestedStage) && suggestedStage !== group.current_stage) {
           console.log(`[STAGE] Advancing ${group.group_name}: ${group.current_stage} → ${suggestedStage}`);
 
