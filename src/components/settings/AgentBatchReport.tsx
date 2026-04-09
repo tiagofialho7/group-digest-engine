@@ -11,7 +11,7 @@ interface BatchReport {
   message_sent: string | null;
   stage_before: string | null;
   stage_after: string | null;
-  reasoning: string;
+  reasoning: string | null;
   processed_at: string;
 }
 
