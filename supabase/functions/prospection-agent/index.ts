@@ -500,17 +500,21 @@ serve(async (req) => {
 
     const agentInstructions = (schedConfigRes.data as any)?.agent_instructions || "Você é um analista comercial.";
 
-    // Fetch prospection groups with pagination
+    // Fetch prospection groups with pagination — only groups not checked in last 3 hours
+    const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
     let groupsQuery = supabaseAdmin
       .from("prospection_groups")
-      .select("id, group_name, current_stage, prospect_name, prospect_company, whatsapp_group_id, priority, notes")
+      .select("id, group_name, current_stage, prospect_name, prospect_company, whatsapp_group_id, priority, notes, last_agent_check_at")
       .eq("org_id", orgId)
       .eq("is_active", true)
       .not("current_stage", "in", "(deal_won,deal_lost)")
-      .order("created_at", { ascending: true });
+      .order("last_agent_check_at", { ascending: true, nullsFirst: true });
 
     if (groupId) {
       groupsQuery = groupsQuery.eq("id", groupId);
+    } else {
+      // Only process groups not checked recently (unless specific group requested)
+      groupsQuery = groupsQuery.or(`last_agent_check_at.is.null,last_agent_check_at.lt.${threeHoursAgo}`);
     }
 
     const effectiveLimit = queryLimit || 50;
