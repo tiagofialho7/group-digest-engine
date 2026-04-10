@@ -353,23 +353,15 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="mb-4">
-                  <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-2 block">Horários de checagem</label>
-                  <div className="grid grid-cols-3 gap-3">
-                    {[
-                      { key: "check_time_1", label: "1ª Checagem" },
-                      { key: "check_time_2", label: "2ª Checagem" },
-                      { key: "check_time_3", label: "3ª Checagem" },
-                    ].map(time => (
-                      <div key={time.key}>
-                        <label className="text-[10px] text-muted-foreground mb-1 block">{time.label}</label>
-                        <input
-                          type="time"
-                          value={schedule[time.key as keyof ScheduleConfig] as string}
-                          onChange={(e) => setSchedule(prev => ({ ...prev, [time.key]: e.target.value }))}
-                          className="w-full bg-muted border border-border rounded-lg px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                        />
-                      </div>
-                    ))}
+                  <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-2 block">Horário de execução diária</label>
+                  <div className="max-w-[200px]">
+                    <label className="text-[10px] text-muted-foreground mb-1 block">Horário (fuso Fortaleza)</label>
+                    <input
+                      type="time"
+                      value={schedule.check_time_1}
+                      onChange={(e) => setSchedule(prev => ({ ...prev, check_time_1: e.target.value }))}
+                      className="w-full bg-muted border border-border rounded-lg px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                    />
                   </div>
                 </div>
 
