@@ -66,6 +66,7 @@ async function processGroup(
   orgId: string,
 ): Promise<GroupResult> {
   const result: GroupResult = { messagesSent: 0, stageUpdated: false };
+  const executionStartTime = new Date().toISOString();
 
   try {
     if (group.current_stage === "deal_won" || group.current_stage === "deal_lost") {
