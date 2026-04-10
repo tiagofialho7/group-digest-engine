@@ -64,6 +64,7 @@ async function processGroup(
   instance: any,
   agentInstructions: string,
   orgId: string,
+  executionStartTime: string,
 ): Promise<GroupResult> {
   const result: GroupResult = { messagesSent: 0, stageUpdated: false };
 
@@ -371,6 +372,21 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
       should_send: decision.should_send,
     };
 
+    // Verificar se já enviou mensagem para este grupo NESTA execução
+    if (decision.should_send && decision.message) {
+      const { data: alreadySentThisExec } = await supabaseAdmin
+        .from("agent_messages")
+        .select("id")
+        .eq("prospection_group_id", group.id)
+        .gte("created_at", executionStartTime)
+        .limit(1);
+
+      if (alreadySentThisExec && alreadySentThisExec.length > 0) {
+        console.log(`[DUPLICATE GUARD] ${group.group_name}: já enviou mensagem nesta execução — pulando`);
+        decision.should_send = false;
+      }
+    }
+
     // Send message if needed
     if (decision.should_send && decision.message) {
       const sendRes = await fetch(
@@ -563,6 +579,7 @@ serve(async (req) => {
 
     console.log(`[AGENT] Batch ${currentBatchNumber}: processing ${groups.length} groups (offset=${effectiveOffset})`);
 
+    const executionStartTime = new Date().toISOString();
     let totalMessagesSent = 0;
     let stageUpdates = 0;
     const errors: string[] = [];
@@ -571,7 +588,7 @@ serve(async (req) => {
     // Process groups sequentially with delay
     for (const group of groups) {
       const stageBefore = group.current_stage;
-      const r = await processGroup(group, supabaseAdmin, evoConfig, apiKey, anthropicKey, instance, agentInstructions, orgId);
+      const r = await processGroup(group, supabaseAdmin, evoConfig, apiKey, anthropicKey, instance, agentInstructions, orgId, executionStartTime);
 
       totalMessagesSent += r.messagesSent;
       if (r.stageUpdated) stageUpdates++;
