@@ -372,6 +372,21 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
       should_send: decision.should_send,
     };
 
+    // Verificar se já enviou mensagem para este grupo NESTA execução
+    if (decision.should_send && decision.message) {
+      const { data: alreadySentThisExec } = await supabaseAdmin
+        .from("agent_messages")
+        .select("id")
+        .eq("prospection_group_id", group.id)
+        .gte("created_at", executionStartTime)
+        .limit(1);
+
+      if (alreadySentThisExec && alreadySentThisExec.length > 0) {
+        console.log(`[DUPLICATE GUARD] ${group.group_name}: já enviou mensagem nesta execução — pulando`);
+        decision.should_send = false;
+      }
+    }
+
     // Send message if needed
     if (decision.should_send && decision.message) {
       const sendRes = await fetch(
