@@ -579,6 +579,7 @@ serve(async (req) => {
 
     console.log(`[AGENT] Batch ${currentBatchNumber}: processing ${groups.length} groups (offset=${effectiveOffset})`);
 
+    const executionStartTime = new Date().toISOString();
     let totalMessagesSent = 0;
     let stageUpdates = 0;
     const errors: string[] = [];
@@ -587,7 +588,7 @@ serve(async (req) => {
     // Process groups sequentially with delay
     for (const group of groups) {
       const stageBefore = group.current_stage;
-      const r = await processGroup(group, supabaseAdmin, evoConfig, apiKey, anthropicKey, instance, agentInstructions, orgId);
+      const r = await processGroup(group, supabaseAdmin, evoConfig, apiKey, anthropicKey, instance, agentInstructions, orgId, executionStartTime);
 
       totalMessagesSent += r.messagesSent;
       if (r.stageUpdated) stageUpdates++;
