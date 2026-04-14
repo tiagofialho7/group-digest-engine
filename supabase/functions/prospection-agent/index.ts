@@ -74,8 +74,10 @@ async function processGroup(
       return result;
     }
 
-    // === REGRA 24H NO CÓDIGO: verificar se agente já enviou mensagem nas últimas 24h ===
+    // === REGRA 24H NO CÓDIGO: verificar agent_messages E messages do Tiago humano ===
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    
+    // Check agent_messages
     const { data: recentAgentMsgs } = await supabaseAdmin
       .from("agent_messages")
       .select("id, sent_at")
@@ -87,6 +89,23 @@ async function processGroup(
       console.log(`[24H SKIP] ${group.group_name}: agente já enviou mensagem nas últimas 24h (${recentAgentMsgs[0].sent_at}) — pulando sem chamar IA`);
       result.decision = { should_send: false, reasoning: "Cobrança do agente < 24h" };
       return result;
+    }
+
+    // Check messages table for Tiago human (using monitored_group_id link)
+    if (group.monitored_group_id) {
+      const { data: recentTiagoMsgs } = await supabaseAdmin
+        .from("messages")
+        .select("id, sent_at")
+        .eq("group_id", group.monitored_group_id)
+        .in("sender_phone", TIAGO_PHONE_NUMBERS)
+        .gte("sent_at", twentyFourHoursAgo)
+        .limit(1);
+
+      if (recentTiagoMsgs && recentTiagoMsgs.length > 0) {
+        console.log(`[24H SKIP] ${group.group_name}: Tiago humano enviou nas últimas 24h (banco) — pulando sem chamar IA`);
+        result.decision = { should_send: false, reasoning: "Tiago humano cobrou < 24h (banco)" };
+        return result;
+      }
     }
 
     console.log(`[${group.group_name}] MODELO EM USO: ${AI_MODEL} (Anthropic Claude)`);
@@ -426,7 +445,11 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
 
       await supabaseAdmin
         .from("prospection_groups")
-        .update({ last_agent_check_at: new Date().toISOString() })
+        .update({ 
+          last_agent_check_at: new Date().toISOString(),
+          follow_up_count: (group.follow_up_count || 0) + 1,
+          last_follow_up_at: new Date().toISOString(),
+        })
         .eq("id", group.id);
 
       result.messagesSent = 1;
@@ -550,7 +573,7 @@ serve(async (req) => {
     // Fetch prospection groups — only this batch
     let groupsQuery = supabaseAdmin
       .from("prospection_groups")
-      .select("id, group_name, current_stage, prospect_name, prospect_company, whatsapp_group_id, priority, notes, last_agent_check_at")
+      .select("id, group_name, current_stage, prospect_name, prospect_company, whatsapp_group_id, priority, notes, last_agent_check_at, follow_up_count, last_follow_up_at, monitored_group_id")
       .eq("org_id", orgId)
       .eq("is_active", true)
       .not("current_stage", "in", "(deal_won,deal_lost)")
@@ -559,7 +582,6 @@ serve(async (req) => {
     if (groupId) {
       groupsQuery = groupsQuery.eq("id", groupId);
     }
-    // No 3h filter — the scheduler already controls execution frequency (3x/day)
 
     groupsQuery = groupsQuery.range(effectiveOffset, effectiveOffset + effectiveBatchSize - 1);
     const { data: groups, error: groupsError } = await groupsQuery;
@@ -593,15 +615,27 @@ serve(async (req) => {
     let stageUpdates = 0;
     const errors: string[] = [];
     const batchReports: any[] = [];
+    const groupsMessaged = new Set<string>();
 
     // Process groups sequentially with delay
     for (const group of groups) {
+      // === DUPLICATE GUARD (Set-based) ===
+      if (groupsMessaged.has(group.id)) {
+        console.log(`[DUPLICATE GUARD SET] ${group.group_name}: já processou nesta execução — pulando`);
+        continue;
+      }
+
       const stageBefore = group.current_stage;
       const r = await processGroup(group, supabaseAdmin, evoConfig, apiKey, anthropicKey, instance, agentInstructions, orgId, executionStartTime);
 
       totalMessagesSent += r.messagesSent;
       if (r.stageUpdated) stageUpdates++;
       if (r.error) errors.push(r.error);
+
+      // Track groups that received messages this execution
+      if (r.messagesSent > 0) {
+        groupsMessaged.add(group.id);
+      }
 
       // Determine action and stage_after
       let action = "sem_acao";

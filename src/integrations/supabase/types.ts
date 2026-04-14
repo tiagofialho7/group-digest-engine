@@ -1188,11 +1188,13 @@ export type Database = {
           assigned_consultants: string[] | null
           created_at: string
           current_stage: string
+          follow_up_count: number
           group_name: string
           id: string
           is_active: boolean
           last_activity_at: string | null
           last_agent_check_at: string | null
+          last_follow_up_at: string | null
           monitored_group_id: string | null
           notes: string | null
           org_id: string
@@ -1206,11 +1208,13 @@ export type Database = {
           assigned_consultants?: string[] | null
           created_at?: string
           current_stage?: string
+          follow_up_count?: number
           group_name: string
           id?: string
           is_active?: boolean
           last_activity_at?: string | null
           last_agent_check_at?: string | null
+          last_follow_up_at?: string | null
           monitored_group_id?: string | null
           notes?: string | null
           org_id: string
@@ -1224,11 +1228,13 @@ export type Database = {
           assigned_consultants?: string[] | null
           created_at?: string
           current_stage?: string
+          follow_up_count?: number
           group_name?: string
           id?: string
           is_active?: boolean
           last_activity_at?: string | null
           last_agent_check_at?: string | null
+          last_follow_up_at?: string | null
           monitored_group_id?: string | null
           notes?: string | null
           org_id?: string
