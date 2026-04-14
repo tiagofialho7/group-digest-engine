@@ -550,7 +550,7 @@ serve(async (req) => {
     // Fetch prospection groups — only this batch
     let groupsQuery = supabaseAdmin
       .from("prospection_groups")
-      .select("id, group_name, current_stage, prospect_name, prospect_company, whatsapp_group_id, priority, notes, last_agent_check_at")
+      .select("id, group_name, current_stage, prospect_name, prospect_company, whatsapp_group_id, priority, notes, last_agent_check_at, follow_up_count, last_follow_up_at")
       .eq("org_id", orgId)
       .eq("is_active", true)
       .not("current_stage", "in", "(deal_won,deal_lost)")
@@ -559,7 +559,6 @@ serve(async (req) => {
     if (groupId) {
       groupsQuery = groupsQuery.eq("id", groupId);
     }
-    // No 3h filter — the scheduler already controls execution frequency (3x/day)
 
     groupsQuery = groupsQuery.range(effectiveOffset, effectiveOffset + effectiveBatchSize - 1);
     const { data: groups, error: groupsError } = await groupsQuery;
@@ -593,9 +592,16 @@ serve(async (req) => {
     let stageUpdates = 0;
     const errors: string[] = [];
     const batchReports: any[] = [];
+    const groupsMessaged = new Set<string>();
 
     // Process groups sequentially with delay
     for (const group of groups) {
+      // === DUPLICATE GUARD (Set-based) ===
+      if (groupsMessaged.has(group.id)) {
+        console.log(`[DUPLICATE GUARD SET] ${group.group_name}: já processou nesta execução — pulando`);
+        continue;
+      }
+
       const stageBefore = group.current_stage;
       const r = await processGroup(group, supabaseAdmin, evoConfig, apiKey, anthropicKey, instance, agentInstructions, orgId, executionStartTime);
 
