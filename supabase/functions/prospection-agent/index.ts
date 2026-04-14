@@ -609,6 +609,11 @@ serve(async (req) => {
       if (r.stageUpdated) stageUpdates++;
       if (r.error) errors.push(r.error);
 
+      // Track groups that received messages this execution
+      if (r.messagesSent > 0) {
+        groupsMessaged.add(group.id);
+      }
+
       // Determine action and stage_after
       let action = "sem_acao";
       if (r.error) action = "erro";
