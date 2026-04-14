@@ -260,6 +260,17 @@ export default function SettingsPage() {
               <div className="flex items-center gap-2">
                 <Bot className="h-4 w-4 text-primary" />
                 <h3 className="text-sm font-semibold text-foreground">Status do Agente</h3>
+                {schedule.is_active ? (
+                  <span className="flex items-center gap-1 text-[10px] font-medium text-green-500">
+                    <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+                    Agente ativo
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1 text-[10px] font-medium text-destructive">
+                    <span className="h-2 w-2 rounded-full bg-destructive" />
+                    Agente pausado
+                  </span>
+                )}
               </div>
               <Button
                 size="sm"

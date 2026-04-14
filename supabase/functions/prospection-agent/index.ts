@@ -501,8 +501,17 @@ serve(async (req) => {
       supabaseAdmin.from("evolution_api_configs").select("api_url, api_key").eq("org_id", orgId).single(),
       supabaseAdmin.from("org_api_keys").select("api_key").eq("org_id", orgId).eq("provider", "anthropic").single(),
       supabaseAdmin.from("whatsapp_instances").select("instance_name, phone_number").eq("org_id", orgId).eq("instance_type", "master").eq("status", "connected").limit(1).single(),
-      supabaseAdmin.from("agent_schedule_config").select("agent_instructions").eq("org_id", orgId).single(),
+      supabaseAdmin.from("agent_schedule_config").select("agent_instructions, is_active").eq("org_id", orgId).single(),
     ]);
+
+    // === CHECK AGENT ENABLED ===
+    const schedConfig = schedConfigRes.data as any;
+    if (schedConfig && schedConfig.is_active === false) {
+      console.log("[AGENT] Agent is PAUSED (is_active=false) for org", orgId);
+      return new Response(JSON.stringify({ message: "Agente pausado", status: "paused" }), {
+        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     const evoConfig = evoConfigRes.data;
     if (!evoConfig) {
@@ -536,7 +545,7 @@ serve(async (req) => {
       });
     }
 
-    const agentInstructions = (schedConfigRes.data as any)?.agent_instructions || "Você é um analista comercial.";
+    const agentInstructions = schedConfig?.agent_instructions || "Você é um analista comercial.";
 
     // Fetch prospection groups — only this batch
     let groupsQuery = supabaseAdmin
