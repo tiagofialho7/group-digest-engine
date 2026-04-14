@@ -426,7 +426,11 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
 
       await supabaseAdmin
         .from("prospection_groups")
-        .update({ last_agent_check_at: new Date().toISOString() })
+        .update({ 
+          last_agent_check_at: new Date().toISOString(),
+          follow_up_count: (group.follow_up_count || 0) + 1,
+          last_follow_up_at: new Date().toISOString(),
+        })
         .eq("id", group.id);
 
       result.messagesSent = 1;
