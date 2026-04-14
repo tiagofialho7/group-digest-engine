@@ -74,8 +74,10 @@ async function processGroup(
       return result;
     }
 
-    // === REGRA 24H NO CÓDIGO: verificar se agente já enviou mensagem nas últimas 24h ===
+    // === REGRA 24H NO CÓDIGO: verificar agent_messages E messages do Tiago humano ===
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    
+    // Check agent_messages
     const { data: recentAgentMsgs } = await supabaseAdmin
       .from("agent_messages")
       .select("id, sent_at")
@@ -87,6 +89,23 @@ async function processGroup(
       console.log(`[24H SKIP] ${group.group_name}: agente já enviou mensagem nas últimas 24h (${recentAgentMsgs[0].sent_at}) — pulando sem chamar IA`);
       result.decision = { should_send: false, reasoning: "Cobrança do agente < 24h" };
       return result;
+    }
+
+    // Check messages table for Tiago human (using monitored_group_id link)
+    if (group.monitored_group_id) {
+      const { data: recentTiagoMsgs } = await supabaseAdmin
+        .from("messages")
+        .select("id, sent_at")
+        .eq("group_id", group.monitored_group_id)
+        .in("sender_phone", TIAGO_PHONE_NUMBERS)
+        .gte("sent_at", twentyFourHoursAgo)
+        .limit(1);
+
+      if (recentTiagoMsgs && recentTiagoMsgs.length > 0) {
+        console.log(`[24H SKIP] ${group.group_name}: Tiago humano enviou nas últimas 24h (banco) — pulando sem chamar IA`);
+        result.decision = { should_send: false, reasoning: "Tiago humano cobrou < 24h (banco)" };
+        return result;
+      }
     }
 
     console.log(`[${group.group_name}] MODELO EM USO: ${AI_MODEL} (Anthropic Claude)`);
