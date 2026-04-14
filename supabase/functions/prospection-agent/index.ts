@@ -545,7 +545,7 @@ serve(async (req) => {
       });
     }
 
-    const agentInstructions = (schedConfigRes.data as any)?.agent_instructions || "Você é um analista comercial.";
+    const agentInstructions = schedConfig?.agent_instructions || "Você é um analista comercial.";
 
     // Fetch prospection groups — only this batch
     let groupsQuery = supabaseAdmin
