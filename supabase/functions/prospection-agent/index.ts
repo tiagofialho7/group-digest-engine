@@ -573,7 +573,7 @@ serve(async (req) => {
     // Fetch prospection groups — only this batch
     let groupsQuery = supabaseAdmin
       .from("prospection_groups")
-      .select("id, group_name, current_stage, prospect_name, prospect_company, whatsapp_group_id, priority, notes, last_agent_check_at, follow_up_count, last_follow_up_at")
+      .select("id, group_name, current_stage, prospect_name, prospect_company, whatsapp_group_id, priority, notes, last_agent_check_at, follow_up_count, last_follow_up_at, monitored_group_id")
       .eq("org_id", orgId)
       .eq("is_active", true)
       .not("current_stage", "in", "(deal_won,deal_lost)")
