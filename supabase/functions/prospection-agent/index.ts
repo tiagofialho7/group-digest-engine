@@ -11,8 +11,8 @@ const AI_MODEL = "claude-haiku-4-5-20251001";
 const DEFAULT_BATCH_SIZE = 5;
 const DELAY_BETWEEN_GROUPS_MS = 500;
 const RETRY_DELAY_MS = 15000;
-// Tiago humano: número correto
-const TIAGO_PHONE_NUMBERS = ["5585981553698"];
+// Tiago humano: número real + LID do WhatsApp
+const TIAGO_PHONE_NUMBERS = ["5585981553698", "270445601419519@lid", "270445601419519"];
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
