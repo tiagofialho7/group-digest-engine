@@ -94,16 +94,18 @@ async function processGroup(
 
     // Check messages table for Tiago human (using monitored_group_id link)
     if (group.monitored_group_id) {
-      const { data: recentTiagoMsgs } = await supabaseAdmin
+      const { data: recentTiagoMsgs, count: tiagoCount } = await supabaseAdmin
         .from("messages")
-        .select("id, sent_at")
+        .select("id, sent_at, sender_phone", { count: "exact" })
         .eq("group_id", group.monitored_group_id)
         .in("sender_phone", TIAGO_PHONE_NUMBERS)
         .gte("sent_at", twentyFourHoursAgo)
         .limit(1);
 
+      console.log(`TIAGO MESSAGES FOUND: ${tiagoCount ?? 0} for group: ${group.group_name}`);
+
       if (recentTiagoMsgs && recentTiagoMsgs.length > 0) {
-        console.log(`[24H SKIP] ${group.group_name}: Tiago humano enviou nas últimas 24h (banco) — pulando sem chamar IA`);
+        console.log(`[24H SKIP] ${group.group_name}: Tiago humano enviou nas últimas 24h (banco, sender_phone=${recentTiagoMsgs[0].sender_phone}) — pulando sem chamar IA`);
         result.decision = { should_send: false, reasoning: "Tiago humano cobrou < 24h (banco)" };
         return result;
       }
