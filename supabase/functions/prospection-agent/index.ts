@@ -11,7 +11,8 @@ const AI_MODEL = "claude-haiku-4-5-20251001";
 const DEFAULT_BATCH_SIZE = 5;
 const DELAY_BETWEEN_GROUPS_MS = 500;
 const RETRY_DELAY_MS = 15000;
-const TIAGO_PHONE_NUMBERS = ["5585815536698", "558581553698", "+5585815536698", "+558581553698"];
+// Tiago humano: número real "5511972328642" e LID do WhatsApp "270445601419519@lid"
+const TIAGO_PHONE_NUMBERS = ["5511972328642", "270445601419519@lid", "270445601419519"];
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -93,16 +94,18 @@ async function processGroup(
 
     // Check messages table for Tiago human (using monitored_group_id link)
     if (group.monitored_group_id) {
-      const { data: recentTiagoMsgs } = await supabaseAdmin
+      const { data: recentTiagoMsgs, count: tiagoCount } = await supabaseAdmin
         .from("messages")
-        .select("id, sent_at")
+        .select("id, sent_at, sender_phone", { count: "exact" })
         .eq("group_id", group.monitored_group_id)
         .in("sender_phone", TIAGO_PHONE_NUMBERS)
         .gte("sent_at", twentyFourHoursAgo)
         .limit(1);
 
+      console.log(`TIAGO MESSAGES FOUND: ${tiagoCount ?? 0} for group: ${group.group_name}`);
+
       if (recentTiagoMsgs && recentTiagoMsgs.length > 0) {
-        console.log(`[24H SKIP] ${group.group_name}: Tiago humano enviou nas últimas 24h (banco) — pulando sem chamar IA`);
+        console.log(`[24H SKIP] ${group.group_name}: Tiago humano enviou nas últimas 24h (banco, sender_phone=${recentTiagoMsgs[0].sender_phone}) — pulando sem chamar IA`);
         result.decision = { should_send: false, reasoning: "Tiago humano cobrou < 24h (banco)" };
         return result;
       }

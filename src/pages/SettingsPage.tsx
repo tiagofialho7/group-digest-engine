@@ -334,7 +334,31 @@ export default function SettingsPage() {
               </div>
               <Switch
                 checked={schedule.is_active}
-                onCheckedChange={(checked) => setSchedule(prev => ({ ...prev, is_active: checked }))}
+                onCheckedChange={async (checked) => {
+                  setSchedule(prev => ({ ...prev, is_active: checked }));
+                  if (!org) return;
+                  try {
+                    if (schedule.id) {
+                      const { error } = await supabase
+                        .from("agent_schedule_config")
+                        .update({ is_active: checked })
+                        .eq("id", schedule.id);
+                      if (error) throw error;
+                    } else {
+                      const { data, error } = await supabase
+                        .from("agent_schedule_config")
+                        .insert({ org_id: org.id, is_active: checked })
+                        .select("id")
+                        .single();
+                      if (error) throw error;
+                      if (data) setSchedule(prev => ({ ...prev, id: (data as any).id }));
+                    }
+                    toast.success(checked ? "Agente ativado" : "Agente pausado");
+                  } catch {
+                    toast.error("Erro ao atualizar status do agente");
+                    setSchedule(prev => ({ ...prev, is_active: !checked }));
+                  }
+                }}
               />
             </div>
 
