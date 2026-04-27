@@ -580,7 +580,9 @@ serve(async (req) => {
       .eq("org_id", orgId)
       .eq("is_active", true)
       .not("current_stage", "in", "(deal_won,deal_lost)")
-      .order("last_agent_check_at", { ascending: true, nullsFirst: true });
+      // Ordenação ESTÁVEL por created_at — last_agent_check_at muda durante a execução
+      // e causaria reordenação entre lotes (grupos pulados ou duplicados).
+      .order("created_at", { ascending: true });
 
     if (groupId) {
       groupsQuery = groupsQuery.eq("id", groupId);
@@ -694,7 +696,10 @@ serve(async (req) => {
 
     // Check if there are more groups — if so, invoke self for next batch (fire-and-forget)
     const hasMore = groups.length === effectiveBatchSize;
+    const nextOffset = effectiveOffset + effectiveBatchSize;
     let nextBatchTriggered = false;
+
+    console.log(`LOTE ${currentBatchNumber} CONCLUÍDO: processados: ${groups.length}, erros: ${errors.length}, próximo offset: ${hasMore ? nextOffset : "FIM"}, total elegíveis: ${totalEligible}`);
 
     if (hasMore && !groupId) {
       console.log(`[AGENT] Batch ${currentBatchNumber} done. Triggering batch ${currentBatchNumber + 1} (fire-and-forget)...`);
