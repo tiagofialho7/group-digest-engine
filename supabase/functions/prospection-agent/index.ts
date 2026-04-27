@@ -696,7 +696,10 @@ serve(async (req) => {
 
     // Check if there are more groups — if so, invoke self for next batch (fire-and-forget)
     const hasMore = groups.length === effectiveBatchSize;
+    const nextOffset = effectiveOffset + effectiveBatchSize;
     let nextBatchTriggered = false;
+
+    console.log(`LOTE ${currentBatchNumber} CONCLUÍDO: processados: ${groups.length}, erros: ${errors.length}, próximo offset: ${hasMore ? nextOffset : "FIM"}, total elegíveis: ${totalEligible}`);
 
     if (hasMore && !groupId) {
       console.log(`[AGENT] Batch ${currentBatchNumber} done. Triggering batch ${currentBatchNumber + 1} (fire-and-forget)...`);
