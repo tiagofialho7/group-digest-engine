@@ -583,10 +583,19 @@ serve(async (req) => {
       groupsQuery = groupsQuery.eq("id", groupId);
     }
 
+    // DEBUG: count total eligible groups before pagination
+    const { count: totalEligible } = await supabaseAdmin
+      .from("prospection_groups")
+      .select("id", { count: "exact", head: true })
+      .eq("org_id", orgId)
+      .eq("is_active", true)
+      .not("current_stage", "in", "(deal_won,deal_lost)");
+    console.log("[AGENT] TOTAL GROUPS BEFORE FILTER (eligible, all batches):", totalEligible);
+
     groupsQuery = groupsQuery.range(effectiveOffset, effectiveOffset + effectiveBatchSize - 1);
     const { data: groups, error: groupsError } = await groupsQuery;
 
-    console.log("[AGENT] GROUPS FOUND:", groups?.length, "offset:", effectiveOffset, "isFirstBatch:", isFirstBatch, "error:", groupsError?.message || "none");
+    console.log("[AGENT] GROUPS FOUND (this batch):", groups?.length, "offset:", effectiveOffset, "isFirstBatch:", isFirstBatch, "error:", groupsError?.message || "none");
 
     if (!groups || groups.length === 0) {
       // No more groups — this is the final batch, log execution
