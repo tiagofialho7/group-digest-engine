@@ -580,7 +580,9 @@ serve(async (req) => {
       .eq("org_id", orgId)
       .eq("is_active", true)
       .not("current_stage", "in", "(deal_won,deal_lost)")
-      .order("last_agent_check_at", { ascending: true, nullsFirst: true });
+      // Ordenação ESTÁVEL por created_at — last_agent_check_at muda durante a execução
+      // e causaria reordenação entre lotes (grupos pulados ou duplicados).
+      .order("created_at", { ascending: true });
 
     if (groupId) {
       groupsQuery = groupsQuery.eq("id", groupId);
