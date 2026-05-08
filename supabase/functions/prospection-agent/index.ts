@@ -75,25 +75,41 @@ async function processGroup(
       return result;
     }
 
+    // === FORCE-SEND: 3+ follow-ups sem resposta e >72h → cobrar SEMPRE ===
+    const followUpCount = group.follow_up_count || 0;
+    const hoursSinceLastFollowUp = group.last_follow_up_at
+      ? (Date.now() - new Date(group.last_follow_up_at).getTime()) / 3600000
+      : Infinity;
+    const forceSendDue = followUpCount >= 3 && hoursSinceLastFollowUp > 72;
+    if (forceSendDue) {
+      console.log(`[FORCE SEND] ${group.group_name}: ${followUpCount} follow-ups e ${hoursSinceLastFollowUp.toFixed(1)}h sem resposta — bypass de filtros`);
+    }
+
     // === REGRA 24H NO CÓDIGO: verificar agent_messages E messages do Tiago humano ===
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    
-    // Check agent_messages
+
+    // Check agent_messages — usa created_at (timestamp real de inserção, imutável)
     const { data: recentAgentMsgs } = await supabaseAdmin
       .from("agent_messages")
-      .select("id, sent_at")
+      .select("id, created_at, sent_at")
       .eq("prospection_group_id", group.id)
-      .gte("sent_at", twentyFourHoursAgo)
+      .order("created_at", { ascending: false })
       .limit(1);
 
-    if (recentAgentMsgs && recentAgentMsgs.length > 0) {
-      console.log(`[24H SKIP] ${group.group_name}: agente já enviou mensagem nas últimas 24h (${recentAgentMsgs[0].sent_at}) — pulando sem chamar IA`);
-      result.decision = { should_send: false, reasoning: "Cobrança do agente < 24h" };
+    const lastAgentMessage = recentAgentMsgs?.[0];
+    console.log("ULTIMA MSG AGENTE:", lastAgentMessage?.created_at, "GRUPO:", group.group_name);
+
+    const lastAgentAtMs = lastAgentMessage?.created_at ? new Date(lastAgentMessage.created_at).getTime() : 0;
+    const agentSentWithin24h = lastAgentAtMs > Date.now() - 24 * 60 * 60 * 1000;
+
+    if (agentSentWithin24h && !forceSendDue) {
+      console.log(`[24H SKIP] ${group.group_name}: agente já enviou mensagem nas últimas 24h (${lastAgentMessage.created_at}) — pulando sem chamar IA`);
+      result.decision = { should_send: false, reasoning: `Cobrança do agente < 24h (created_at=${lastAgentMessage.created_at})` };
       return result;
     }
 
     // Check messages table for Tiago human (using monitored_group_id link)
-    if (group.monitored_group_id) {
+    if (group.monitored_group_id && !forceSendDue) {
       const { data: recentTiagoMsgs, count: tiagoCount } = await supabaseAdmin
         .from("messages")
         .select("id, sent_at, sender_phone", { count: "exact" })
