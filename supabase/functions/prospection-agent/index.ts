@@ -16,6 +16,14 @@ const TIAGO_PHONE_NUMBERS = ["5585981553698", "270445601419519@lid", "2704456014
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+// Valida que a mensagem não é null/undefined/vazia/string literal "null"|"undefined"
+function isValidMessage(msg: unknown): msg is string {
+  if (typeof msg !== "string") return false;
+  const t = msg.trim();
+  if (t === "" || t === "null" || t === "undefined" || t.toLowerCase() === "null" || t.toLowerCase() === "undefined") return false;
+  return true;
+}
+
 const stageMap: Record<string, string> = {
   pre_qualification: "Pré-Qualificação",
   contact_made: "Contato Realizado",
@@ -349,7 +357,7 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
     if (forceSendDue && !decision.should_send) {
       console.log(`[FORCE SEND OVERRIDE] ${group.group_name}: forçando should_send=true (${followUpCount} follow-ups, ${hoursSinceLastFollowUp.toFixed(1)}h)`);
       decision.should_send = true;
-      if (!decision.message || decision.message.trim() === "") {
+      if (!isValidMessage(decision.message)) {
         decision.message = "Pessoal, alguma novidade aqui? Continuamos sem retorno do cliente, querem que eu tente outro caminho?";
       }
       decision.reasoning = (decision.reasoning || "") + ` [FORCE SEND — ${followUpCount} follow-ups sem resposta há ${hoursSinceLastFollowUp.toFixed(1)}h]`;
@@ -398,7 +406,7 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
         suggestedStage = null;
         isDealWonConfirmation = true;
         decision.should_send = true;
-        if (!decision.message || decision.message.trim() === "") {
+        if (!isValidMessage(decision.message)) {
           decision.message = "Pessoal, posso confirmar que esse negócio foi fechado? Querem que eu marque como ganho aqui?";
         }
         decision.reasoning = (decision.reasoning || "") + " [DEAL_WON PENDENTE — aguardando confirmação ativa do consultor antes de atualizar fase]";
@@ -506,8 +514,14 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
       }
     }
 
+    // Final guard: nunca enviar mensagem inválida ("null", "undefined", vazia)
+    if (decision.should_send && !isValidMessage(decision.message)) {
+      console.warn(`[INVALID MESSAGE GUARD] ${group.group_name}: mensagem inválida (${JSON.stringify(decision.message)}) — usando fallback genérico`);
+      decision.message = "Bom dia, pessoal! Alguma novidade aqui?";
+    }
+
     // Send message if needed
-    if (decision.should_send && decision.message) {
+    if (decision.should_send && isValidMessage(decision.message)) {
       let whatsappMsgId: string | null = null;
       let sendFailed = false;
       let sendErrorDetail = "";
