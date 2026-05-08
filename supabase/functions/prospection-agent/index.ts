@@ -514,8 +514,14 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
       }
     }
 
+    // Final guard: nunca enviar mensagem inválida ("null", "undefined", vazia)
+    if (decision.should_send && !isValidMessage(decision.message)) {
+      console.warn(`[INVALID MESSAGE GUARD] ${group.group_name}: mensagem inválida (${JSON.stringify(decision.message)}) — usando fallback genérico`);
+      decision.message = "Bom dia, pessoal! Alguma novidade aqui?";
+    }
+
     // Send message if needed
-    if (decision.should_send && decision.message) {
+    if (decision.should_send && isValidMessage(decision.message)) {
       let whatsappMsgId: string | null = null;
       let sendFailed = false;
       let sendErrorDetail = "";
