@@ -8,7 +8,7 @@ const corsHeaders = {
 
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 const AI_MODEL = "claude-haiku-4-5-20251001";
-const DEFAULT_BATCH_SIZE = 5;
+const DEFAULT_BATCH_SIZE = 15;
 const DELAY_BETWEEN_GROUPS_MS = 500;
 const RETRY_DELAY_MS = 15000;
 // Tiago humano: número real + LID do WhatsApp
@@ -823,13 +823,13 @@ serve(async (req) => {
     console.log(`LOTE ${currentBatchNumber} CONCLUÍDO: processados: ${groups.length}, erros: ${errors.length}, próximo offset: ${hasMore ? nextOffset : "FIM"}, total elegíveis: ${totalEligible}`);
 
     if (hasMore && !groupId) {
-      console.log(`[AGENT] Batch ${currentBatchNumber} done. Triggering batch ${currentBatchNumber + 1} (fire-and-forget)...`);
+      const nextBatchNumber = currentBatchNumber + 1;
+      console.log(`[CHAIN] Batch ${currentBatchNumber} done. Dispatching batch ${nextBatchNumber} (offset=${nextOffset}) via EdgeRuntime.waitUntil...`);
       try {
         const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
         const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-        
-        // Fire-and-forget: don't await the response, just ensure the request is sent
-        const fetchPromise = fetch(`${supabaseUrl}/functions/v1/prospection-agent`, {
+
+        const chainPromise = fetch(`${supabaseUrl}/functions/v1/prospection-agent`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -838,19 +838,38 @@ serve(async (req) => {
           body: JSON.stringify({
             orgId,
             batch_size: effectiveBatchSize,
-            offset: effectiveOffset + effectiveBatchSize,
+            offset: nextOffset,
             execution_id: executionId,
-            batch_number: currentBatchNumber + 1,
+            batch_number: nextBatchNumber,
           }),
-        });
-        
-        // Wait just enough to ensure the request is dispatched, not for the full response
-        const timeoutPromise = new Promise(resolve => setTimeout(resolve, 2000));
-        await Promise.race([fetchPromise.then(() => { nextBatchTriggered = true; }), timeoutPromise.then(() => { nextBatchTriggered = true; })]);
-        
-        console.log(`[AGENT] Next batch request dispatched successfully`);
+        })
+          .then(async (r) => {
+            const bodyText = r.ok ? "" : await r.text().catch(() => "");
+            if (r.ok) {
+              console.log(`[CHAIN DISPATCHED] Batch ${nextBatchNumber} responded with HTTP ${r.status}`);
+            } else {
+              console.error(`[CHAIN ERROR] Batch ${nextBatchNumber} HTTP ${r.status}: ${bodyText.substring(0, 500)}`);
+            }
+          })
+          .catch((err) => {
+            console.error(`[CHAIN ERROR] Batch ${nextBatchNumber} fetch failed:`, err instanceof Error ? err.message : String(err));
+          });
+
+        // Mantém o isolate vivo até o fetch resolver, mesmo após o response retornar
+        // @ts-ignore - EdgeRuntime é global injetado pelo runtime Supabase Edge
+        if (typeof EdgeRuntime !== "undefined" && typeof EdgeRuntime.waitUntil === "function") {
+          // @ts-ignore
+          EdgeRuntime.waitUntil(chainPromise);
+          nextBatchTriggered = true;
+          console.log(`[CHAIN] EdgeRuntime.waitUntil registered for batch ${nextBatchNumber}`);
+        } else {
+          // Fallback: aguarda o fetch concluir antes de retornar
+          console.warn(`[CHAIN] EdgeRuntime.waitUntil indisponível — aguardando fetch sincronamente`);
+          await chainPromise;
+          nextBatchTriggered = true;
+        }
       } catch (chainErr) {
-        console.error(`[AGENT] Error chaining batch ${currentBatchNumber + 1}:`, chainErr);
+        console.error(`[CHAIN ERROR] Failed to dispatch batch ${nextBatchNumber}:`, chainErr instanceof Error ? chainErr.message : String(chainErr));
       }
     }
 
