@@ -505,7 +505,7 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
         org_id: orgId,
         prospection_group_id: group.id,
         message_text: decision.message,
-        message_type: "followup",
+        message_type: isDealWonConfirmation ? "deal_won_confirmation" : "followup",
         delivered: true,
         whatsapp_message_id: whatsappMsgId,
       });
