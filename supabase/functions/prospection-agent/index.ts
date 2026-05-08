@@ -75,25 +75,41 @@ async function processGroup(
       return result;
     }
 
+    // === FORCE-SEND: 3+ follow-ups sem resposta e >72h → cobrar SEMPRE ===
+    const followUpCount = group.follow_up_count || 0;
+    const hoursSinceLastFollowUp = group.last_follow_up_at
+      ? (Date.now() - new Date(group.last_follow_up_at).getTime()) / 3600000
+      : Infinity;
+    const forceSendDue = followUpCount >= 3 && hoursSinceLastFollowUp > 72;
+    if (forceSendDue) {
+      console.log(`[FORCE SEND] ${group.group_name}: ${followUpCount} follow-ups e ${hoursSinceLastFollowUp.toFixed(1)}h sem resposta — bypass de filtros`);
+    }
+
     // === REGRA 24H NO CÓDIGO: verificar agent_messages E messages do Tiago humano ===
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    
-    // Check agent_messages
+
+    // Check agent_messages — usa created_at (timestamp real de inserção, imutável)
     const { data: recentAgentMsgs } = await supabaseAdmin
       .from("agent_messages")
-      .select("id, sent_at")
+      .select("id, created_at, sent_at")
       .eq("prospection_group_id", group.id)
-      .gte("sent_at", twentyFourHoursAgo)
+      .order("created_at", { ascending: false })
       .limit(1);
 
-    if (recentAgentMsgs && recentAgentMsgs.length > 0) {
-      console.log(`[24H SKIP] ${group.group_name}: agente já enviou mensagem nas últimas 24h (${recentAgentMsgs[0].sent_at}) — pulando sem chamar IA`);
-      result.decision = { should_send: false, reasoning: "Cobrança do agente < 24h" };
+    const lastAgentMessage = recentAgentMsgs?.[0];
+    console.log("ULTIMA MSG AGENTE:", lastAgentMessage?.created_at, "GRUPO:", group.group_name);
+
+    const lastAgentAtMs = lastAgentMessage?.created_at ? new Date(lastAgentMessage.created_at).getTime() : 0;
+    const agentSentWithin24h = lastAgentAtMs > Date.now() - 24 * 60 * 60 * 1000;
+
+    if (agentSentWithin24h && !forceSendDue) {
+      console.log(`[24H SKIP] ${group.group_name}: agente já enviou mensagem nas últimas 24h (${lastAgentMessage.created_at}) — pulando sem chamar IA`);
+      result.decision = { should_send: false, reasoning: `Cobrança do agente < 24h (created_at=${lastAgentMessage.created_at})` };
       return result;
     }
 
     // Check messages table for Tiago human (using monitored_group_id link)
-    if (group.monitored_group_id) {
+    if (group.monitored_group_id && !forceSendDue) {
       const { data: recentTiagoMsgs, count: tiagoCount } = await supabaseAdmin
         .from("messages")
         .select("id, sent_at, sender_phone", { count: "exact" })
@@ -191,7 +207,7 @@ async function processGroup(
 
     // Check Tiago humano intervention — skip AI call entirely if Tiago sent in last 24h
     const tiagoCheck = checkTiagoIntervention(whatsappMessages);
-    if (tiagoCheck.tiagoSent) {
+    if (tiagoCheck.tiagoSent && !forceSendDue) {
       console.log(`[24H SKIP] ${group.group_name}: Tiago humano enviou às ${tiagoCheck.tiagoTime} (últimas 24h) — pulando sem chamar IA`);
       result.decision = { should_send: false, reasoning: `Tiago humano cobrou às ${tiagoCheck.tiagoTime} (< 24h)` };
       return result;
@@ -322,10 +338,21 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
     let suggestedStage = (rawStage && rawStage !== "none" && rawStage !== "null" && String(rawStage).trim() !== "") ? String(rawStage).trim() : null;
 
     // REGRA ABSOLUTA: Se Tiago humano enviou mensagem nas últimas 24h → should_send = false, sem exceção
-    if (tiagoCheck.tiagoSent && decision.should_send) {
+    // EXCETO quando forceSendDue (3+ follow-ups e >72h sem resposta)
+    if (tiagoCheck.tiagoSent && decision.should_send && !forceSendDue) {
       console.log(`[TIAGO OVERRIDE] ${group.group_name}: Tiago humano enviou às ${tiagoCheck.tiagoTime} (últimas 24h) — forçando should_send=false`);
       decision.should_send = false;
       decision.reasoning = (decision.reasoning || "") + " [OVERRIDE: Tiago humano já cobrou e houve resposta]";
+    }
+
+    // === FORCE-SEND OVERRIDE: 3+ follow-ups e >72h → cobrar SEMPRE ===
+    if (forceSendDue && !decision.should_send) {
+      console.log(`[FORCE SEND OVERRIDE] ${group.group_name}: forçando should_send=true (${followUpCount} follow-ups, ${hoursSinceLastFollowUp.toFixed(1)}h)`);
+      decision.should_send = true;
+      if (!decision.message || decision.message.trim() === "") {
+        decision.message = "Pessoal, alguma novidade aqui? Continuamos sem retorno do cliente, querem que eu tente outro caminho?";
+      }
+      decision.reasoning = (decision.reasoning || "") + ` [FORCE SEND — ${followUpCount} follow-ups sem resposta há ${hoursSinceLastFollowUp.toFixed(1)}h]`;
     }
 
     // === VALIDAÇÃO DEAL_LOST: exige confirmação explícita do consultor no reasoning ===
@@ -481,25 +508,49 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
 
     // Send message if needed
     if (decision.should_send && decision.message) {
-      const sendRes = await fetch(
-        `${evoConfig.api_url}/message/sendText/${instance.instance_name}`,
-        {
-          method: "POST",
-          headers: { apikey: apiKey, "Content-Type": "application/json" },
-          body: JSON.stringify({ number: group.whatsapp_group_id, text: decision.message }),
-        }
-      );
-
       let whatsappMsgId: string | null = null;
-      if (sendRes.ok) {
-        const sendData = await sendRes.json();
-        whatsappMsgId = sendData?.key?.id || null;
-      } else {
-        const errText = await sendRes.text();
-        console.error(`Send error for ${group.group_name}: ${sendRes.status} ${errText}`);
-        result.error = `Send failed for ${group.group_name}`;
+      let sendFailed = false;
+      let sendErrorDetail = "";
+
+      try {
+        const sendRes = await fetch(
+          `${evoConfig.api_url}/message/sendText/${instance.instance_name}`,
+          {
+            method: "POST",
+            headers: { apikey: apiKey, "Content-Type": "application/json" },
+            body: JSON.stringify({ number: group.whatsapp_group_id, text: decision.message }),
+          }
+        );
+
+        if (sendRes.ok) {
+          const sendData = await sendRes.json();
+          whatsappMsgId = sendData?.key?.id || null;
+        } else {
+          sendFailed = true;
+          sendErrorDetail = `${sendRes.status} ${await sendRes.text()}`;
+        }
+      } catch (sendNetErr) {
+        sendFailed = true;
+        sendErrorDetail = sendNetErr instanceof Error ? sendNetErr.message : "network error";
+      }
+
+      if (sendFailed) {
+        console.warn(`[SEND FAIL — INACTIVATING] ${group.group_name}: ${sendErrorDetail}`);
+        // Marca grupo como inativo — não tentar reenviar em execuções futuras
+        await supabaseAdmin
+          .from("prospection_groups")
+          .update({ is_active: false, last_agent_check_at: new Date().toISOString() })
+          .eq("id", group.id);
+
+        result.messagesSent = 0;
+        result.decision = {
+          ...(result.decision || {}),
+          should_send: false,
+          reasoning: `[SEM AÇÃO — agente removido do grupo ou grupo inativo. Erro Evolution: ${sendErrorDetail.substring(0, 150)}] Grupo marcado como inativo.`,
+        };
         return result;
       }
+
 
       await supabaseAdmin.from("agent_messages").insert({
         org_id: orgId,
