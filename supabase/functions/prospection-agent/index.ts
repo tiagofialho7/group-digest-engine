@@ -349,7 +349,7 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
     if (forceSendDue && !decision.should_send) {
       console.log(`[FORCE SEND OVERRIDE] ${group.group_name}: forçando should_send=true (${followUpCount} follow-ups, ${hoursSinceLastFollowUp.toFixed(1)}h)`);
       decision.should_send = true;
-      if (!decision.message || decision.message.trim() === "") {
+      if (!isValidMessage(decision.message)) {
         decision.message = "Pessoal, alguma novidade aqui? Continuamos sem retorno do cliente, querem que eu tente outro caminho?";
       }
       decision.reasoning = (decision.reasoning || "") + ` [FORCE SEND — ${followUpCount} follow-ups sem resposta há ${hoursSinceLastFollowUp.toFixed(1)}h]`;
