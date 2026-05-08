@@ -227,9 +227,10 @@ export default function SettingsPage() {
       });
       if (error) throw error;
       toast.success(`Agente executado! ${data?.results?.[0]?.groups_checked || 0} grupos verificados, ${data?.results?.[0]?.messages_sent || 0} mensagens enviadas.`);
-      // Refresh last execution
-      const { data: execData } = await supabase.from("agent_execution_logs").select("*").eq("org_id", org.id).order("executed_at", { ascending: false }).limit(1).maybeSingle();
-      if (execData) setLastExecution(execData);
+      // Aguarda lotes encadeados e re-agrega — refresh duas vezes para pegar batches subsequentes
+      await new Promise(r => setTimeout(r, 3000));
+      await loadLastExecution(org.id);
+      setTimeout(() => loadLastExecution(org.id), 15000);
     } catch (err: any) {
       toast.error(err?.message || "Erro ao executar agente");
     } finally {
