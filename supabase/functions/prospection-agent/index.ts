@@ -508,25 +508,49 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
 
     // Send message if needed
     if (decision.should_send && decision.message) {
-      const sendRes = await fetch(
-        `${evoConfig.api_url}/message/sendText/${instance.instance_name}`,
-        {
-          method: "POST",
-          headers: { apikey: apiKey, "Content-Type": "application/json" },
-          body: JSON.stringify({ number: group.whatsapp_group_id, text: decision.message }),
-        }
-      );
-
       let whatsappMsgId: string | null = null;
-      if (sendRes.ok) {
-        const sendData = await sendRes.json();
-        whatsappMsgId = sendData?.key?.id || null;
-      } else {
-        const errText = await sendRes.text();
-        console.error(`Send error for ${group.group_name}: ${sendRes.status} ${errText}`);
-        result.error = `Send failed for ${group.group_name}`;
+      let sendFailed = false;
+      let sendErrorDetail = "";
+
+      try {
+        const sendRes = await fetch(
+          `${evoConfig.api_url}/message/sendText/${instance.instance_name}`,
+          {
+            method: "POST",
+            headers: { apikey: apiKey, "Content-Type": "application/json" },
+            body: JSON.stringify({ number: group.whatsapp_group_id, text: decision.message }),
+          }
+        );
+
+        if (sendRes.ok) {
+          const sendData = await sendRes.json();
+          whatsappMsgId = sendData?.key?.id || null;
+        } else {
+          sendFailed = true;
+          sendErrorDetail = `${sendRes.status} ${await sendRes.text()}`;
+        }
+      } catch (sendNetErr) {
+        sendFailed = true;
+        sendErrorDetail = sendNetErr instanceof Error ? sendNetErr.message : "network error";
+      }
+
+      if (sendFailed) {
+        console.warn(`[SEND FAIL — INACTIVATING] ${group.group_name}: ${sendErrorDetail}`);
+        // Marca grupo como inativo — não tentar reenviar em execuções futuras
+        await supabaseAdmin
+          .from("prospection_groups")
+          .update({ is_active: false, last_agent_check_at: new Date().toISOString() })
+          .eq("id", group.id);
+
+        result.messagesSent = 0;
+        result.decision = {
+          ...(result.decision || {}),
+          should_send: false,
+          reasoning: `[SEM AÇÃO — agente removido do grupo ou grupo inativo. Erro Evolution: ${sendErrorDetail.substring(0, 150)}] Grupo marcado como inativo.`,
+        };
         return result;
       }
+
 
       await supabaseAdmin.from("agent_messages").insert({
         org_id: orgId,
