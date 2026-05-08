@@ -207,7 +207,7 @@ async function processGroup(
 
     // Check Tiago humano intervention — skip AI call entirely if Tiago sent in last 24h
     const tiagoCheck = checkTiagoIntervention(whatsappMessages);
-    if (tiagoCheck.tiagoSent) {
+    if (tiagoCheck.tiagoSent && !forceSendDue) {
       console.log(`[24H SKIP] ${group.group_name}: Tiago humano enviou às ${tiagoCheck.tiagoTime} (últimas 24h) — pulando sem chamar IA`);
       result.decision = { should_send: false, reasoning: `Tiago humano cobrou às ${tiagoCheck.tiagoTime} (< 24h)` };
       return result;
