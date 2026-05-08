@@ -107,14 +107,46 @@ export default function SettingsPage() {
   const [lastExecution, setLastExecution] = useState<any>(null);
   const [runningAgent, setRunningAgent] = useState(false);
 
+  const loadLastExecution = async (orgId: string) => {
+    // Agrega TODOS os lotes da última execução completa via agent_batch_reports
+    const { data: latest } = await supabase
+      .from("agent_batch_reports")
+      .select("execution_id")
+      .eq("org_id", orgId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!latest) {
+      setLastExecution(null);
+      return;
+    }
+
+    const { data: allRows } = await supabase
+      .from("agent_batch_reports")
+      .select("action, processed_at")
+      .eq("org_id", orgId)
+      .eq("execution_id", (latest as any).execution_id);
+
+    const rows = (allRows as any[]) || [];
+    const messagesSent = rows.filter(r => r.action === "mensagem_enviada").length;
+    const errors = rows.filter(r => r.action === "erro").length;
+    const executedAt = rows.reduce<string | null>((max, r) =>
+      !max || new Date(r.processed_at) > new Date(max) ? r.processed_at : max, null);
+
+    setLastExecution({
+      groups_checked: rows.length,
+      messages_sent: messagesSent,
+      executed_at: executedAt,
+      status: errors > 0 ? "partial_error" : "success",
+    });
+  };
+
   useEffect(() => {
     if (!org) return;
 
     const fetchConfig = async () => {
-      const [schedRes, execRes] = await Promise.all([
-        supabase.from("agent_schedule_config").select("*").eq("org_id", org.id).maybeSingle(),
-        supabase.from("agent_execution_logs").select("*").eq("org_id", org.id).order("executed_at", { ascending: false }).limit(1).maybeSingle(),
-      ]);
+      const schedRes = await supabase.from("agent_schedule_config").select("*").eq("org_id", org.id).maybeSingle();
 
       if (schedRes.data) {
         const d = schedRes.data as any;
@@ -130,8 +162,7 @@ export default function SettingsPage() {
         });
       }
 
-      if (execRes.data) setLastExecution(execRes.data);
-
+      await loadLastExecution(org.id);
       setLoadingConfig(false);
     };
 
