@@ -398,7 +398,7 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
         suggestedStage = null;
         isDealWonConfirmation = true;
         decision.should_send = true;
-        if (!decision.message || decision.message.trim() === "") {
+        if (!isValidMessage(decision.message)) {
           decision.message = "Pessoal, posso confirmar que esse negócio foi fechado? Querem que eu marque como ganho aqui?";
         }
         decision.reasoning = (decision.reasoning || "") + " [DEAL_WON PENDENTE — aguardando confirmação ativa do consultor antes de atualizar fase]";
