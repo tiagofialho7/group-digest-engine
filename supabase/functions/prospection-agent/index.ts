@@ -319,7 +319,7 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
 
     // Normalize suggested_stage
     const rawStage = decision.suggested_stage;
-    const suggestedStage = (rawStage && rawStage !== "none" && rawStage !== "null" && String(rawStage).trim() !== "") ? String(rawStage).trim() : null;
+    let suggestedStage = (rawStage && rawStage !== "none" && rawStage !== "null" && String(rawStage).trim() !== "") ? String(rawStage).trim() : null;
 
     // REGRA ABSOLUTA: Se Tiago humano enviou mensagem nas últimas 24h → should_send = false, sem exceção
     if (tiagoCheck.tiagoSent && decision.should_send) {
@@ -328,9 +328,79 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
       decision.reasoning = (decision.reasoning || "") + " [OVERRIDE: Tiago humano já cobrou e houve resposta]";
     }
 
+    // === VALIDAÇÃO DEAL_LOST: exige confirmação explícita do consultor no reasoning ===
+    if (suggestedStage === "deal_lost") {
+      const reasoningLower = (decision.reasoning || "").toLowerCase();
+      const lostKeywords = [
+        "perdemos", "perdido", "cliente recusou", "recusou a proposta",
+        "não vai fechar", "nao vai fechar", "desistiu", "desistir",
+        "fechou com concorrente", "fechou com outro", "escolheu outro",
+        "cancelou", "não tem interesse", "nao tem interesse",
+        "não quer mais", "nao quer mais", "declinou",
+      ];
+      const hasExplicitConfirmation = lostKeywords.some(kw => reasoningLower.includes(kw));
+      if (!hasExplicitConfirmation) {
+        console.log(`[DEAL_LOST BLOCK] ${group.group_name}: bloqueando deal_lost — sem confirmação explícita no reasoning`);
+        decision.reasoning = (decision.reasoning || "") + " [FASE NÃO ATUALIZADA — aguardando confirmação explícita do consultor de que o negócio foi perdido]";
+        suggestedStage = null;
+      }
+    }
+
+    // === FLUXO DEAL_WON: confirmação ativa em duas etapas ===
+    let isDealWonConfirmation = false;
+    if (suggestedStage === "deal_won") {
+      // Verifica se já existe pergunta de confirmação pendente
+      const lastConfirmMsg = (prevAgentMsgs || []).find((m: any) => m.message_type === "deal_won_confirmation");
+      const lastConfirmAt = lastConfirmMsg ? new Date(lastConfirmMsg.sent_at).getTime() : 0;
+      const within7Days = lastConfirmAt > Date.now() - 7 * 24 * 60 * 60 * 1000;
+
+      const reasoningLower = (decision.reasoning || "").toLowerCase();
+      const confirmedKeywords = [
+        "confirmou", "confirmado", "fechado", "fechamos", "assinou",
+        "assinado", "contrato assinado", "pagamento confirmado",
+        "cliente confirmou", "deu ok", "aprovado pelo cliente",
+      ];
+      const consultantConfirmed = confirmedKeywords.some(kw => reasoningLower.includes(kw));
+
+      if (within7Days && consultantConfirmed) {
+        console.log(`[DEAL_WON CONFIRMED] ${group.group_name}: consultor confirmou após pergunta — atualizando stage`);
+        // Mantém suggestedStage = "deal_won" — segue fluxo normal de update
+      } else {
+        // Primeira detecção OU sem confirmação → enviar pergunta de confirmação, NÃO atualizar stage
+        console.log(`[DEAL_WON PENDING] ${group.group_name}: enviando pergunta de confirmação, aguardando resposta do consultor`);
+        suggestedStage = null;
+        isDealWonConfirmation = true;
+        decision.should_send = true;
+        if (!decision.message || decision.message.trim() === "") {
+          decision.message = "Pessoal, posso confirmar que esse negócio foi fechado? Querem que eu marque como ganho aqui?";
+        }
+        decision.reasoning = (decision.reasoning || "") + " [DEAL_WON PENDENTE — aguardando confirmação ativa do consultor antes de atualizar fase]";
+      }
+    }
+
     console.log(`[${group.group_name}] DECISION PARSED:`, JSON.stringify(decision));
     console.log("[STAGE]", group.group_name, "current:", group.current_stage, "suggested:", suggestedStage);
     console.log(`[${group.group_name}] should_send=${decision.should_send}, reasoning=${decision.reasoning?.substring(0, 100)}`);
+
+    // === ENRIQUECER REASONING quando should_send=false (motivo detalhado do skip) ===
+    if (!decision.should_send) {
+      const lastAgent = prevAgentMsgs?.[0];
+      const skipDetails: string[] = [];
+      if (lastAgent) {
+        const hoursSince = (Date.now() - new Date(lastAgent.sent_at).getTime()) / 3600000;
+        skipDetails.push(`última cobrança do agente há ${hoursSince.toFixed(1)}h`);
+        if (hoursSince < 24) skipDetails.push("(< 24h)");
+      } else {
+        skipDetails.push("sem cobrança anterior do agente");
+      }
+      if (group.follow_up_count) skipDetails.push(`follow-ups: ${group.follow_up_count}`);
+      if (group.last_follow_up_at) {
+        const h = (Date.now() - new Date(group.last_follow_up_at).getTime()) / 3600000;
+        skipDetails.push(`último follow-up há ${h.toFixed(1)}h`);
+      }
+      decision.reasoning = `[SEM AÇÃO — ${skipDetails.join(", ")}] ${decision.reasoning || ""}`;
+      console.log(`[SKIP DETAIL] ${group.group_name}: ${decision.reasoning.substring(0, 200)}`);
+    }
 
     // Save/update context memory
     if (decision.context_summary || decision.pending_actions || decision.key_dates) {
