@@ -16,6 +16,14 @@ const TIAGO_PHONE_NUMBERS = ["5585981553698", "270445601419519@lid", "2704456014
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+// Valida que a mensagem não é null/undefined/vazia/string literal "null"|"undefined"
+function isValidMessage(msg: unknown): msg is string {
+  if (typeof msg !== "string") return false;
+  const t = msg.trim();
+  if (t === "" || t === "null" || t === "undefined" || t.toLowerCase() === "null" || t.toLowerCase() === "undefined") return false;
+  return true;
+}
+
 const stageMap: Record<string, string> = {
   pre_qualification: "Pré-Qualificação",
   contact_made: "Contato Realizado",
