@@ -96,24 +96,36 @@ serve(async (req) => {
         if (!isNearScheduled) continue;
       }
 
-      // Invoke the prospection-agent function
+      // Dispatch prospection-agent in fire-and-forget mode.
+      // The cron's net.http_post has a 5s timeout, and the agent takes ~30s+
+      // to process a batch — so we MUST respond immediately and let the
+      // agent run in the background via EdgeRuntime.waitUntil.
       try {
-        const agentRes = await fetch(
-          `${Deno.env.get("SUPABASE_URL")}/functions/v1/prospection-agent`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
-            },
-            body: JSON.stringify({ orgId: config.org_id }),
-          }
-        );
+        const agentUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/prospection-agent`;
+        const agentInit: RequestInit = {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+          },
+          body: JSON.stringify({ orgId: config.org_id }),
+        };
 
-        const agentData = await agentRes.json();
-        results.push({ org_id: config.org_id, ...agentData });
+        const dispatch = fetch(agentUrl, agentInit)
+          .then((r) => console.log(`[SCHEDULER DISPATCHED] org=${config.org_id} HTTP ${r.status}`))
+          .catch((e) => console.error(`[SCHEDULER DISPATCH ERROR] org=${config.org_id}`, e));
+
+        // @ts-ignore - EdgeRuntime is available in Supabase Edge Runtime
+        if (typeof EdgeRuntime !== "undefined" && EdgeRuntime?.waitUntil) {
+          // @ts-ignore
+          EdgeRuntime.waitUntil(dispatch);
+        } else {
+          await dispatch;
+        }
+
+        results.push({ org_id: config.org_id, dispatched: true });
       } catch (e) {
-        console.error(`Error invoking agent for org ${config.org_id}:`, e);
+        console.error(`Error dispatching agent for org ${config.org_id}:`, e);
         results.push({ org_id: config.org_id, error: e instanceof Error ? e.message : "unknown" });
       }
     }
