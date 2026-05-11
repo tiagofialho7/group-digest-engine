@@ -171,6 +171,20 @@ async function processGroup(
       console.error(`Failed to fetch messages for group ${group.id}:`, e);
     }
 
+    // === DEFENSIVE FILTER: garantir que só processamos mensagens do grupo correto ===
+    // Protege contra eventual bug do servidor Evolution ignorando o filtro `where.key.remoteJid`
+    const beforeFilter = whatsappMessages.length;
+    whatsappMessages = whatsappMessages.filter(
+      (m: any) => m?.key?.remoteJid === group.whatsapp_group_id
+    );
+    if (beforeFilter !== whatsappMessages.length) {
+      console.warn(
+        `[CROSS-GROUP GUARD] ${group.group_name}: Evolution retornou ${beforeFilter} mensagens, ` +
+        `mas só ${whatsappMessages.length} pertencem a ${group.whatsapp_group_id}. ` +
+        `${beforeFilter - whatsappMessages.length} descartadas.`
+      );
+    }
+
     // Fetch agent's previous messages
     const { data: prevAgentMsgs } = await supabaseAdmin
       .from("agent_messages")
