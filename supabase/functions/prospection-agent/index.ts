@@ -253,7 +253,7 @@ MENSAGENS NOVAS DESDE A ÚLTIMA ANÁLISE:`;
     }
 
     const notesSection = group.notes
-      ? `\nNOTAS DA PROSPECÇÃO (contexto importante — PRIORIDADE MÁXIMA na análise):\n${group.notes}\n`
+      ? `\nNOTAS INTERNAS DO GRUPO (campo notes): As notas são contexto de background para você entender a situação — NÃO são mensagens do grupo. Nunca mencione nas suas cobranças informações que vieram apenas das notas. Use as notas para entender o contexto, mas baseie suas perguntas apenas no que foi dito nas mensagens recentes.\n${group.notes}\n`
       : "";
 
     const userPrompt = `GRUPO: ${group.group_name}
