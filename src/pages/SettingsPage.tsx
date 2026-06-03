@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { EvolutionApiConfig } from "@/components/settings/EvolutionApiConfig";
 import { WhatsAppInstancesManager } from "@/components/settings/WhatsAppInstancesManager";
 import { AgentBatchReport } from "@/components/settings/AgentBatchReport";
+import { TechnicalDiagnostics } from "@/components/settings/TechnicalDiagnostics";
 
 const DAYS = [
   { key: "monday", label: "Seg" },
@@ -560,6 +561,10 @@ export default function SettingsPage() {
               </>
             )}
           </section>
+        </TabsContent>
+
+        <TabsContent value="diagnostics" className="space-y-4">
+          <TechnicalDiagnostics />
         </TabsContent>
       </Tabs>
     </div>
