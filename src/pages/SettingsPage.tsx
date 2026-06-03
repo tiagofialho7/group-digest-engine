@@ -247,10 +247,11 @@ export default function SettingsPage() {
       <h1 className="text-xl font-bold text-foreground tracking-tight mb-6">Configurações</h1>
 
       <Tabs defaultValue="whatsapp" className="w-full">
-        <TabsList className="w-full grid grid-cols-3 mb-6">
+        <TabsList className="w-full grid grid-cols-4 mb-6">
           <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>
           <TabsTrigger value="agent">Agente IA</TabsTrigger>
           <TabsTrigger value="instructions">Instruções</TabsTrigger>
+          <TabsTrigger value="diagnostics">Diagnóstico</TabsTrigger>
         </TabsList>
 
         {/* WhatsApp Tab */}
