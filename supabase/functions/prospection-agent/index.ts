@@ -381,10 +381,10 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
     if (suggestedStage === "deal_lost") {
       const reasoningLower = (decision.reasoning || "").toLowerCase();
       const lostKeywords = [
-        "perdemos", "perdido", "cliente recusou", "recusou a proposta",
+        "perdemos", "perdido", "lost", "cliente recusou", "recusou a proposta",
         "não vai fechar", "nao vai fechar", "desistiu", "desistir",
         "fechou com concorrente", "fechou com outro", "escolheu outro",
-        "cancelou", "não tem interesse", "nao tem interesse",
+        "cancelou", "cancelado", "não tem interesse", "nao tem interesse",
         "não quer mais", "nao quer mais", "declinou",
       ];
       const hasExplicitConfirmation = lostKeywords.some(kw => reasoningLower.includes(kw));
@@ -392,6 +392,12 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
         console.log(`[DEAL_LOST BLOCK] ${group.group_name}: bloqueando deal_lost — sem confirmação explícita no reasoning`);
         decision.reasoning = (decision.reasoning || "") + " [FASE NÃO ATUALIZADA — aguardando confirmação explícita do consultor de que o negócio foi perdido]";
         suggestedStage = null;
+      } else {
+        // Confirmação explícita → atualizar fase imediatamente nesta execução e enviar mensagem neutra
+        console.log(`[DEAL_LOST CONFIRMED] ${group.group_name}: confirmação explícita encontrada — atualizando fase agora`);
+        decision.should_send = true;
+        decision.message = "Registrado. Lembrem de atualizar no Nexus CRM!";
+        decision.reasoning = (decision.reasoning || "") + " [DEAL_LOST CONFIRMADO — fase atualizada nesta execução]";
       }
     }
 
