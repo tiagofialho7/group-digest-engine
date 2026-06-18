@@ -145,6 +145,40 @@ async function processGroup(
       .single();
 
     const hasContext = savedContext && savedContext.context_summary;
+
+    // === BLOQUEIO POR DATA FUTURA SALVA (key_dates) ===
+    if (hasContext && savedContext.key_dates && !forceSendDue) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      // Extrai datas no formato DD/MM/AAAA ou DD/MM do campo key_dates
+      const dateMatches = savedContext.key_dates.match(/\d{1,2}\/\d{1,2}(?:\/\d{2,4})?/g) || [];
+
+      for (const dateStr of dateMatches) {
+        const parts = dateStr.split("/");
+        const day = parseInt(parts[0]);
+        const month = parseInt(parts[1]) - 1;
+        const year = parts[2] ? (parts[2].length === 2 ? 2000 + parseInt(parts[2]) : parseInt(parts[2])) : today.getFullYear();
+        const parsedDate = new Date(year, month, day);
+
+        if (parsedDate > today) {
+          console.log(`[FUTURE DATE BLOCK] ${group.group_name}: data futura detectada em key_dates (${dateStr}) — sem ação até ${dateStr}`);
+          result.decision = {
+            should_send: false,
+            reasoning: `Data futura confirmada em key_dates: ${dateStr}. Aguardando essa data passar antes de cobrar.`
+          };
+
+          // Salva contexto com a data identificada para logs
+          await supabaseAdmin
+            .from("prospection_groups")
+            .update({ last_agent_check_at: new Date().toISOString() })
+            .eq("id", group.id);
+
+          return result;
+        }
+      }
+    }
+
     const messageLimit = hasContext ? 30 : 30;
 
     // Fetch WhatsApp messages
