@@ -151,31 +151,61 @@ async function processGroup(
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      // Extrai datas no formato DD/MM/AAAA ou DD/MM do campo key_dates
-      const dateMatches = savedContext.key_dates.match(/\d{1,2}\/\d{1,2}(?:\/\d{2,4})?/g) || [];
+      const keyDatesText = savedContext.key_dates.toLowerCase();
 
-      for (const dateStr of dateMatches) {
+      // Bloqueio por mês/ano escrito por extenso (ex: "julho/2026", and "agosto/2026")
+      const monthNames: Record<string, number> = {
+        "janeiro": 0, "fevereiro": 1, "março": 2, "abril": 3,
+        "maio": 4, "junho": 5, "julho": 6, "agosto": 7,
+        "setembro": 8, "outubro": 9, "novembro": 10, "dezembro": 11,
+      };
+      for (const [monthName, monthIndex] of Object.entries(monthNames)) {
+        const regex = new RegExp(`${monthName}[/\\s]*(\\d{4})`);
+        const match = keyDatesText.match(regex);
+        if (match) {
+          const year = parseInt(match[1]);
+          // Bloqueia se o mês/ano ainda não terminou
+          const lastDayOfMonth = new Date(year, monthIndex + 1, 0);
+          if (lastDayOfMonth >= today) {
+            console.log(`[FUTURE DATE BLOCK] ${group.group_name}: mês futuro detectado em key_dates (${monthName}/${year}) — sem ação até o mês passar`);
+            result.decision = {
+              should_send: false,
+              reasoning: `Data futura confirmada em key_dates: ${monthName}/${year}. Aguardando esse período passar antes de cobrar.`,
+            };
+            await supabaseAdmin
+              .from("prospection_groups")
+              .update({ last_agent_check_at: new Date().toISOString() })
+              .eq("id", group.id);
+            return result;
+          }
+        }
+      }
+
+      // Bloqueio por data explícita DD/MM/AAAA ou DD/MM — ignora datas já vencidas
+      const dateMatches = savedContext.key_dates.match(/\d{1,2}\/\d{1,2}(?:\/\d{2,4})?/g) || [];
+      const futureDates = dateMatches.filter(dateStr => {
         const parts = dateStr.split("/");
         const day = parseInt(parts[0]);
         const month = parseInt(parts[1]) - 1;
-        const year = parts[2] ? (parts[2].length === 2 ? 2000 + parseInt(parts[2]) : parseInt(parts[2])) : today.getFullYear();
+        const year = parts[2]
+          ? (parts[2].length === 2 ? 2000 + parseInt(parts[2]) : parseInt(parts[2]))
+          : today.getFullYear();
         const parsedDate = new Date(year, month, day);
+        return parsedDate > today;
+      });
 
-        if (parsedDate > today) {
-          console.log(`[FUTURE DATE BLOCK] ${group.group_name}: data futura detectada em key_dates (${dateStr}) — sem ação até ${dateStr}`);
-          result.decision = {
-            should_send: false,
-            reasoning: `Data futura confirmada em key_dates: ${dateStr}. Aguardando essa data passar antes de cobrar.`
-          };
-
-          // Salva contexto com a data identificada para logs
-          await supabaseAdmin
-            .from("prospection_groups")
-            .update({ last_agent_check_at: new Date().toISOString() })
-            .eq("id", group.id);
-
-          return result;
-        }
+      if (futureDates.length > 0) {
+        const nextDate = futureDates[0];
+        console.log(`[FUTURE DATE BLOCK] ${group.group_name}: data futura detectada em key_dates (${nextDate}) — sem ação até ${nextDate}`);
+        result.decision = {
+          should_send: false,
+          reasoning: `Data futura confirmada em key_dates: ${nextDate}. Aguardando essa data passar antes de cobrar.`,
+        };
+        await supabaseAdmin
+          .from("prospection_groups")
+          .update({ last_agent_check_at: new Date().toISOString() })
+          .eq("id", group.id);
+        return result;
       }
     }
 
