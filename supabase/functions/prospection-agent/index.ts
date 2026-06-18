@@ -145,6 +145,40 @@ async function processGroup(
       .single();
 
     const hasContext = savedContext && savedContext.context_summary;
+
+    // === BLOQUEIO POR DATA FUTURA SALVA (key_dates) ===
+    if (hasContext && savedContext.key_dates && !forceSendDue) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      // Extrai datas no formato DD/MM/AAAA ou DD/MM do campo key_dates
+      const dateMatches = savedContext.key_dates.match(/\d{1,2}\/\d{1,2}(?:\/\d{2,4})?/g) || [];
+
+      for (const dateStr of dateMatches) {
+        const parts = dateStr.split("/");
+        const day = parseInt(parts[0]);
+        const month = parseInt(parts[1]) - 1;
+        const year = parts[2] ? (parts[2].length === 2 ? 2000 + parseInt(parts[2]) : parseInt(parts[2])) : today.getFullYear();
+        const parsedDate = new Date(year, month, day);
+
+        if (parsedDate > today) {
+          console.log(`[FUTURE DATE BLOCK] ${group.group_name}: data futura detectada em key_dates (${dateStr}) — sem ação até ${dateStr}`);
+          result.decision = {
+            should_send: false,
+            reasoning: `Data futura confirmada em key_dates: ${dateStr}. Aguardando essa data passar antes de cobrar.`
+          };
+
+          // Salva contexto com a data identificada para logs
+          await supabaseAdmin
+            .from("prospection_groups")
+            .update({ last_agent_check_at: new Date().toISOString() })
+            .eq("id", group.id);
+
+          return result;
+        }
+      }
+    }
+
     const messageLimit = hasContext ? 30 : 30;
 
     // Fetch WhatsApp messages
@@ -377,24 +411,25 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
       decision.reasoning = (decision.reasoning || "") + ` [FORCE SEND — ${followUpCount} follow-ups sem resposta há ${hoursSinceLastFollowUp.toFixed(1)}h]`;
     }
 
-    // === VALIDAÇÃO DEAL_LOST: exige confirmação explícita do consultor no reasoning ===
+    // === VALIDAÇÃO DEAL_LOST: exige confirmação explícita nas mensagens reais do grupo ===
     if (suggestedStage === "deal_lost") {
-      const reasoningLower = (decision.reasoning || "").toLowerCase();
+      const allMessageText = messagesContext.toLowerCase();
       const lostKeywords = [
-        "perdemos", "perdido", "lost", "cliente recusou", "recusou a proposta",
-        "não vai fechar", "nao vai fechar", "desistiu", "desistir",
+        "perdemos", "perdido", "lost", "cliente recusou",
+        "não vai fechar", "nao vai fechar", "desistiu",
         "fechou com concorrente", "fechou com outro", "escolheu outro",
         "cancelou", "cancelado", "não tem interesse", "nao tem interesse",
-        "não quer mais", "nao quer mais", "declinou",
+        "não quer mais", "nao quer mais", "declinou", "deu lost", "vou dar lost",
+        "marca como perdido", "marca como lost",
       ];
-      const hasExplicitConfirmation = lostKeywords.some(kw => reasoningLower.includes(kw));
+      const hasExplicitConfirmation = lostKeywords.some(kw => allMessageText.includes(kw));
       if (!hasExplicitConfirmation) {
-        console.log(`[DEAL_LOST BLOCK] ${group.group_name}: bloqueando deal_lost — sem confirmação explícita no reasoning`);
+        console.log(`[DEAL_LOST BLOCK] ${group.group_name}: bloqueando deal_lost — sem confirmação explícita nas mensagens`);
         decision.reasoning = (decision.reasoning || "") + " [FASE NÃO ATUALIZADA — aguardando confirmação explícita do consultor de que o negócio foi perdido]";
         suggestedStage = null;
+        // Não altera should_send — agente pode ainda enviar a pergunta que o modelo sugeriu
       } else {
-        // Confirmação explícita → atualizar fase imediatamente nesta execução e enviar mensagem neutra
-        console.log(`[DEAL_LOST CONFIRMED] ${group.group_name}: confirmação explícita encontrada — atualizando fase agora`);
+        console.log(`[DEAL_LOST CONFIRMED] ${group.group_name}: confirmação explícita encontrada nas mensagens — atualizando fase`);
         decision.should_send = true;
         decision.message = "Registrado. Lembrem de atualizar no Nexus CRM!";
         decision.reasoning = (decision.reasoning || "") + " [DEAL_LOST CONFIRMADO — fase atualizada nesta execução]";
@@ -419,7 +454,13 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
 
       if (within7Days && consultantConfirmed) {
         console.log(`[DEAL_WON CONFIRMED] ${group.group_name}: consultor confirmou após pergunta — atualizando stage`);
-        // Mantém suggestedStage = "deal_won" — segue fluxo normal de update
+        // Confirmado: atualiza stage e silencia mensagem neste ciclo
+        // A mensagem de CRM será enviada pelo bloco de stage update abaixo
+        decision.should_send = true;
+        decision.message = "Registrado, pessoal! Lembrem de atualizar no Nexus CRM como negócio fechado.";
+        decision.reasoning = (decision.reasoning || "") + " [DEAL_WON CONFIRMADO — apenas CRM reminder, sem cobrança adicional]";
+        // Após confirmar deal_won, não processar nenhuma cobrança adicional neste ciclo
+        suggestedStage = "deal_won"; // mantém explícito
       } else {
         // Primeira detecção OU sem confirmação → enviar pergunta de confirmação, NÃO atualizar stage
         console.log(`[DEAL_WON PENDING] ${group.group_name}: enviando pergunta de confirmação, aguardando resposta do consultor`);
