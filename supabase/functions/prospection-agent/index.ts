@@ -377,24 +377,25 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
       decision.reasoning = (decision.reasoning || "") + ` [FORCE SEND — ${followUpCount} follow-ups sem resposta há ${hoursSinceLastFollowUp.toFixed(1)}h]`;
     }
 
-    // === VALIDAÇÃO DEAL_LOST: exige confirmação explícita do consultor no reasoning ===
+    // === VALIDAÇÃO DEAL_LOST: exige confirmação explícita nas mensagens reais do grupo ===
     if (suggestedStage === "deal_lost") {
-      const reasoningLower = (decision.reasoning || "").toLowerCase();
+      const allMessageText = messagesContext.toLowerCase();
       const lostKeywords = [
-        "perdemos", "perdido", "lost", "cliente recusou", "recusou a proposta",
-        "não vai fechar", "nao vai fechar", "desistiu", "desistir",
+        "perdemos", "perdido", "lost", "cliente recusou",
+        "não vai fechar", "nao vai fechar", "desistiu",
         "fechou com concorrente", "fechou com outro", "escolheu outro",
         "cancelou", "cancelado", "não tem interesse", "nao tem interesse",
-        "não quer mais", "nao quer mais", "declinou",
+        "não quer mais", "nao quer mais", "declinou", "deu lost", "vou dar lost",
+        "marca como perdido", "marca como lost",
       ];
-      const hasExplicitConfirmation = lostKeywords.some(kw => reasoningLower.includes(kw));
+      const hasExplicitConfirmation = lostKeywords.some(kw => allMessageText.includes(kw));
       if (!hasExplicitConfirmation) {
-        console.log(`[DEAL_LOST BLOCK] ${group.group_name}: bloqueando deal_lost — sem confirmação explícita no reasoning`);
+        console.log(`[DEAL_LOST BLOCK] ${group.group_name}: bloqueando deal_lost — sem confirmação explícita nas mensagens`);
         decision.reasoning = (decision.reasoning || "") + " [FASE NÃO ATUALIZADA — aguardando confirmação explícita do consultor de que o negócio foi perdido]";
         suggestedStage = null;
+        // Não altera should_send — agente pode ainda enviar a pergunta que o modelo sugeriu
       } else {
-        // Confirmação explícita → atualizar fase imediatamente nesta execução e enviar mensagem neutra
-        console.log(`[DEAL_LOST CONFIRMED] ${group.group_name}: confirmação explícita encontrada — atualizando fase agora`);
+        console.log(`[DEAL_LOST CONFIRMED] ${group.group_name}: confirmação explícita encontrada nas mensagens — atualizando fase`);
         decision.should_send = true;
         decision.message = "Registrado. Lembrem de atualizar no Nexus CRM!";
         decision.reasoning = (decision.reasoning || "") + " [DEAL_LOST CONFIRMADO — fase atualizada nesta execução]";
