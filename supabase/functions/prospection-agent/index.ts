@@ -420,7 +420,13 @@ Responda APENAS em JSON válido: { "should_send": boolean, "message": string | n
 
       if (within7Days && consultantConfirmed) {
         console.log(`[DEAL_WON CONFIRMED] ${group.group_name}: consultor confirmou após pergunta — atualizando stage`);
-        // Mantém suggestedStage = "deal_won" — segue fluxo normal de update
+        // Confirmado: atualiza stage e silencia mensagem neste ciclo
+        // A mensagem de CRM será enviada pelo bloco de stage update abaixo
+        decision.should_send = true;
+        decision.message = "Registrado, pessoal! Lembrem de atualizar no Nexus CRM como negócio fechado.";
+        decision.reasoning = (decision.reasoning || "") + " [DEAL_WON CONFIRMADO — apenas CRM reminder, sem cobrança adicional]";
+        // Após confirmar deal_won, não processar nenhuma cobrança adicional neste ciclo
+        suggestedStage = "deal_won"; // mantém explícito
       } else {
         // Primeira detecção OU sem confirmação → enviar pergunta de confirmação, NÃO atualizar stage
         console.log(`[DEAL_WON PENDING] ${group.group_name}: enviando pergunta de confirmação, aguardando resposta do consultor`);
